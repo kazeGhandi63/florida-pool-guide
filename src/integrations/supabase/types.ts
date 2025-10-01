@@ -142,6 +142,51 @@ export type Database = {
         }
         Relationships: []
       }
+      treatments: {
+        Row: {
+          id: string
+          created_at: string
+          pool_id: string
+          user_id: string
+          bicarb_cups_added: number | null
+          calcium_cups_added: number | null
+          treatment_date: string
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          pool_id: string
+          user_id: string
+          bicarb_cups_added?: number | null
+          calcium_cups_added?: number | null
+          treatment_date?: string
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          pool_id?: string
+          user_id?: string
+          bicarb_cups_added?: number | null
+          calcium_cups_added?: number | null
+          treatment_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatments_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "treatments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weekly_reads: {
         Row: {
           alkalinity: number | null

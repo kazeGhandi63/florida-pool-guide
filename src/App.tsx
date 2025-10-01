@@ -10,6 +10,7 @@ import BungalowReads from "./pages/BungalowReads";
 import ResortReads from "./pages/ResortReads";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
+import WaterBalanced from "./pages/WaterBalanced";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
         <Route path="/reads/:poolId" element={<PoolReads />} />
         <Route path="/bungalows" element={<BungalowReads />} />
         <Route path="/reports" element={<Reports />} />
+        <Route path="/water-balanced" element={<WaterBalanced />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

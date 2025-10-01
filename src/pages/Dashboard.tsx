@@ -79,6 +79,9 @@ const Dashboard = () => {
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold">Pool Reads Dashboard</h1>
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate("/water-balanced")}>
+              Water Balance
+            </Button>
             <Button variant="outline" onClick={() => navigate("/reports")}>
               View Reports
             </Button>
