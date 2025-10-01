@@ -2,11 +2,13 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tables } from "@/integrations/supabase/types";
+import { format, parseISO } from "date-fns";
 
 type Pool = {
   id: string;
@@ -34,6 +36,9 @@ type WeeklyReads = {
   lsi: number | null;
 };
 
+type LatestDailyRead = Tables<"daily_reads">;
+type LatestWeeklyRead = Tables<"weekly_reads">;
+
 const ResortReads = () => {
   const { resortId } = useParams();
   const navigate = useNavigate();
@@ -43,6 +48,8 @@ const ResortReads = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [reads, setReads] = useState<Record<string, PoolReads>>({});
   const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReads>>({});
+  const [latestDailyReads, setLatestDailyReads] = useState<Record<string, LatestDailyRead>>({});
+  const [latestWeeklyReads, setLatestWeeklyReads] = useState<Record<string, LatestWeeklyRead>>({});
 
   useEffect(() => {
     fetchResortAndPools();
@@ -77,7 +84,6 @@ const ResortReads = () => {
     if (poolsError) {
       toast({ title: "Error", description: poolsError.message, variant: "destructive" });
     } else {
-      // Custom sort for Grand Floridian
       let sortedPools = poolsData || [];
       if (resortData.name === "Grand Floridian") {
         const order = ["Court Yard Pool", "Court Yard Spa", "Beach Pool", "APA", "Men Spa", "Women Spa"];
@@ -92,26 +98,47 @@ const ResortReads = () => {
       }
       
       setPools(sortedPools);
-      const initialReads: Record<string, PoolReads> = {};
-      const initialWeeklyReads: Record<string, WeeklyReads> = {};
-      sortedPools.forEach((pool) => {
-        initialReads[pool.id] = {
-          chlorine: "",
-          ph: "",
-          temperature: "",
-          flow: "",
-          influent: "",
-          effluent: "",
-        };
-        initialWeeklyReads[pool.id] = {
-          tds: "",
-          alkalinity: "",
-          calciumHardness: "",
-          lsi: null,
-        };
-      });
-      setReads(initialReads);
-      setWeeklyReads(initialWeeklyReads);
+      const poolIds = sortedPools.map(p => p.id);
+
+      if (poolIds.length > 0) {
+        const { data: dailyData } = await supabase.from("daily_reads").select("*").in("pool_id", poolIds).order("read_date", { ascending: false });
+        const { data: weeklyData } = await supabase.from("weekly_reads").select("*").in("pool_id", poolIds).order("read_date", { ascending: false });
+
+        const latestDailyByPool: Record<string, LatestDailyRead> = {};
+        for (const read of dailyData || []) {
+          if (read.pool_id && !latestDailyByPool[read.pool_id]) latestDailyByPool[read.pool_id] = read;
+        }
+        setLatestDailyReads(latestDailyByPool);
+
+        const latestWeeklyByPool: Record<string, LatestWeeklyRead> = {};
+        for (const read of weeklyData || []) {
+          if (read.pool_id && !latestWeeklyByPool[read.pool_id]) latestWeeklyByPool[read.pool_id] = read;
+        }
+        setLatestWeeklyReads(latestWeeklyByPool);
+
+        const initialReads: Record<string, PoolReads> = {};
+        const initialWeeklyReads: Record<string, WeeklyReads> = {};
+        sortedPools.forEach((pool) => {
+          const lastDaily = latestDailyByPool[pool.id];
+          initialReads[pool.id] = {
+            chlorine: lastDaily?.chlorine?.toString() ?? "",
+            ph: lastDaily?.ph?.toString() ?? "",
+            temperature: lastDaily?.temperature?.toString() ?? "",
+            flow: lastDaily?.flow?.toString() ?? "",
+            influent: lastDaily?.influent?.toString() ?? "",
+            effluent: lastDaily?.effluent?.toString() ?? "",
+          };
+          const lastWeekly = latestWeeklyByPool[pool.id];
+          initialWeeklyReads[pool.id] = {
+            tds: lastWeekly?.tds?.toString() ?? "",
+            alkalinity: lastWeekly?.alkalinity?.toString() ?? "",
+            calciumHardness: lastWeekly?.calcium_hardness?.toString() ?? "",
+            lsi: lastWeekly?.saturation_index ?? null,
+          };
+        });
+        setReads(initialReads);
+        setWeeklyReads(initialWeeklyReads);
+      }
     }
   };
 
@@ -129,7 +156,6 @@ const ResortReads = () => {
         [poolId]: { ...prev[poolId], [field]: value },
       };
       
-      // Calculate LSI when relevant fields change (Florida-compliant formula)
       const poolData = updated[poolId];
       const dailyData = reads[poolId];
       if (poolData.tds && poolData.alkalinity && poolData.calciumHardness && dailyData?.ph && dailyData?.temperature) {
@@ -138,18 +164,11 @@ const ResortReads = () => {
         const alkValue = parseFloat(poolData.alkalinity);
         const caValue = parseFloat(poolData.calciumHardness);
         const tdsValue = parseFloat(poolData.tds);
-        
-        // Convert Fahrenheit to Celsius
         const tempCelsius = (tempFahrenheit - 32) * 5 / 9;
-        
-        // Langelier Saturation Index (LSI) formula - Florida compliant
-        // LSI = pH - pHs
-        // pHs = (9.3 + A + B) - (C + D)
         const A = (Math.log10(tdsValue) - 1) / 10;
         const B = -13.12 * Math.log10(tempCelsius + 273) + 34.55;
         const C = Math.log10(caValue) - 0.4;
         const D = Math.log10(alkValue);
-        
         const pHs = (9.3 + A + B) - (C + D);
         const lsiValue = phValue - pHs;
         updated[poolId].lsi = Math.round(lsiValue * 100) / 100;
@@ -191,19 +210,7 @@ const ResortReads = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "All reads saved!" });
-      // Reset form
-      const resetReads: Record<string, PoolReads> = {};
-      pools.forEach((pool) => {
-        resetReads[pool.id] = {
-          chlorine: "",
-          ph: "",
-          temperature: "",
-          flow: "",
-          influent: "",
-          effluent: "",
-        };
-      });
-      setReads(resetReads);
+      fetchResortAndPools();
     }
   };
 
@@ -232,17 +239,7 @@ const ResortReads = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "All weekly reads saved!" });
-      // Reset form
-      const resetWeekly: Record<string, WeeklyReads> = {};
-      pools.forEach((pool) => {
-        resetWeekly[pool.id] = {
-          tds: "",
-          alkalinity: "",
-          calciumHardness: "",
-          lsi: null,
-        };
-      });
-      setWeeklyReads(resetWeekly);
+      fetchResortAndPools();
     }
   };
 
@@ -281,6 +278,11 @@ const ResortReads = () => {
                   <Card key={pool.id} className="print:break-inside-avoid print:shadow-none print:mb-1">
                     <CardHeader className="py-2 print:py-1">
                       <CardTitle className="text-base print:text-sm">{pool.name}</CardTitle>
+                      {latestDailyReads[pool.id] && (
+                        <CardDescription className="text-xs">
+                          Last: {format(parseISO(latestDailyReads[pool.id].read_date!), "M/d/yy")}
+                        </CardDescription>
+                      )}
                     </CardHeader>
                     <CardContent className="py-2 print:py-1">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-2 print:gap-1">
@@ -368,6 +370,11 @@ const ResortReads = () => {
                   <Card key={pool.id} className="print:break-inside-avoid print:shadow-none">
                     <CardHeader className="print:py-2">
                       <CardTitle className="text-lg print:text-base">{pool.name}</CardTitle>
+                      {latestWeeklyReads[pool.id] && (
+                        <CardDescription className="text-xs">
+                          Last: {format(parseISO(latestWeeklyReads[pool.id].read_date!), "M/d/yy")}
+                        </CardDescription>
+                      )}
                     </CardHeader>
                     <CardContent className="print:py-2">
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:gap-2">

@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Droplets, Beaker } from "lucide-react";
 import { Tables } from "@/integrations/supabase/types";
+import { format, parseISO } from "date-fns";
 
 type Pool = {
   id: string;
@@ -23,6 +24,7 @@ type WeeklyReads = {
 };
 
 type LatestWeeklyRead = Tables<"weekly_reads">;
+type LatestDailyRead = Tables<"daily_reads">;
 
 type TreatmentSuggestion = {
   bicarb: number;
@@ -36,6 +38,7 @@ const BungalowReads = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [reads, setReads] = useState<Record<string, { chlorine: string; ph: string; temperature: string; flow: string }>>({});
   const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReads>>({});
+  const [latestDailyReads, setLatestDailyReads] = useState<Record<string, LatestDailyRead>>({});
   const [latestWeeklyReads, setLatestWeeklyReads] = useState<Record<string, LatestWeeklyRead>>({});
   const [treatmentSuggestions, setTreatmentSuggestions] = useState<Record<string, TreatmentSuggestion>>({});
 
@@ -82,15 +85,40 @@ const BungalowReads = () => {
       return numA - numB;
     });
     setBungalows(sortedData);
-    const initialReads: Record<string, any> = {};
-    const initialWeeklyReads: Record<string, WeeklyReads> = {};
-    sortedData.forEach((b) => {
-      initialReads[b.id] = { chlorine: "", ph: "", temperature: "", flow: "" };
-      initialWeeklyReads[b.id] = { tds: "", alkalinity: "", calciumHardness: "", lsi: null };
-    });
-    setReads(initialReads);
-    setWeeklyReads(initialWeeklyReads);
-    fetchLatestWeeklyReads(sortedData.map(b => b.id));
+    const poolIds = sortedData.map(b => b.id);
+
+    if (poolIds.length > 0) {
+      const { data: dailyData, error: dailyError } = await supabase
+        .from("daily_reads")
+        .select("*")
+        .in("pool_id", poolIds)
+        .order("read_date", { ascending: false });
+
+      if (dailyError) {
+        toast({ title: "Error fetching daily reads", description: dailyError.message, variant: "destructive" });
+      } else {
+        const latestReadsByPool: Record<string, LatestDailyRead> = {};
+        for (const read of dailyData || []) {
+          if (read.pool_id && !latestReadsByPool[read.pool_id]) {
+            latestReadsByPool[read.pool_id] = read;
+          }
+        }
+        setLatestDailyReads(latestReadsByPool);
+
+        const initialReads: Record<string, any> = {};
+        sortedData.forEach((b) => {
+          const lastRead = latestReadsByPool[b.id];
+          initialReads[b.id] = {
+            chlorine: lastRead?.chlorine?.toString() ?? "",
+            ph: lastRead?.ph?.toString() ?? "",
+            temperature: lastRead?.temperature?.toString() ?? "",
+            flow: lastRead?.flow?.toString() ?? "",
+          };
+        });
+        setReads(initialReads);
+      }
+    }
+    fetchLatestWeeklyReads(poolIds);
   };
 
   const fetchLatestWeeklyReads = async (poolIds: string[]) => {
@@ -114,6 +142,18 @@ const BungalowReads = () => {
       }
     }
     setLatestWeeklyReads(latestReadsByPool);
+
+    const initialWeeklyReads: Record<string, WeeklyReads> = {};
+    poolIds.forEach(poolId => {
+      const read = latestReadsByPool[poolId];
+      initialWeeklyReads[poolId] = {
+        tds: read?.tds?.toString() ?? "",
+        alkalinity: read?.alkalinity?.toString() ?? "",
+        calciumHardness: read?.calcium_hardness?.toString() ?? "",
+        lsi: read?.saturation_index ?? null,
+      };
+    });
+    setWeeklyReads(initialWeeklyReads);
 
     const suggestions: Record<string, TreatmentSuggestion> = {};
     poolIds.forEach(poolId => {
@@ -178,11 +218,7 @@ const BungalowReads = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "All reads saved!" });
-      const resetReads: Record<string, any> = {};
-      bungalows.forEach((b) => {
-        resetReads[b.id] = { chlorine: "", ph: "", temperature: "", flow: "" };
-      });
-      setReads(resetReads);
+      fetchBungalows();
     }
   };
 
@@ -207,11 +243,6 @@ const BungalowReads = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "All weekly reads saved!" });
-      const resetWeekly: Record<string, WeeklyReads> = {};
-      bungalows.forEach((b) => {
-        resetWeekly[b.id] = { tds: "", alkalinity: "", calciumHardness: "", lsi: null };
-      });
-      setWeeklyReads(resetWeekly);
       fetchLatestWeeklyReads(bungalows.map(b => b.id));
     }
   };
@@ -246,7 +277,14 @@ const BungalowReads = () => {
         <div className="grid gap-3 print:gap-2">
           {group.map((bungalow) => (
             <Card key={bungalow.id} className="print:break-inside-avoid print:shadow-none">
-              <CardHeader className="py-2 print:py-1"><CardTitle className="text-sm print:text-xs">{bungalow.name}</CardTitle></CardHeader>
+              <CardHeader className="py-2 print:py-1">
+                <CardTitle className="text-sm print:text-xs">{bungalow.name}</CardTitle>
+                {latestDailyReads[bungalow.id] && (
+                  <CardDescription className="text-xs">
+                    Last: {format(parseISO(latestDailyReads[bungalow.id].read_date!), "M/d/yy")}
+                  </CardDescription>
+                )}
+              </CardHeader>
               <CardContent className="py-2 print:py-1">
                 <div className="grid grid-cols-4 gap-2 print:gap-1">
                   <div className="space-y-1"><Label htmlFor={`${bungalow.id}-chlorine`} className="text-xs">Chlorine</Label><Input id={`${bungalow.id}-chlorine`} type="number" step="0.01" value={reads[bungalow.id]?.chlorine || ""} onChange={(e) => handleInputChange(bungalow.id, "chlorine", e.target.value)} className="h-8 text-sm print:h-6 print:text-xs" /></div>
@@ -270,7 +308,14 @@ const BungalowReads = () => {
         <div className="grid gap-3 print:gap-2">
           {group.map((bungalow) => (
             <Card key={bungalow.id} className="print:break-inside-avoid print:shadow-none">
-              <CardHeader className="py-2 print:py-1"><CardTitle className="text-sm print:text-xs">{bungalow.name}</CardTitle></CardHeader>
+              <CardHeader className="py-2 print:py-1">
+                <CardTitle className="text-sm print:text-xs">{bungalow.name}</CardTitle>
+                {latestWeeklyReads[bungalow.id] && (
+                  <CardDescription className="text-xs">
+                    Last: {format(parseISO(latestWeeklyReads[bungalow.id].read_date!), "M/d/yy")}
+                  </CardDescription>
+                )}
+              </CardHeader>
               <CardContent className="py-2 print:py-1">
                 <div className="grid grid-cols-4 gap-2 print:gap-1">
                   <div className="space-y-1"><Label htmlFor={`${bungalow.id}-tds`} className="text-xs">TDS</Label><Input id={`${bungalow.id}-tds`} type="number" step="0.01" value={weeklyReads[bungalow.id]?.tds || ""} onChange={(e) => handleWeeklyInputChange(bungalow.id, "tds", e.target.value)} className="h-8 text-sm print:h-6 print:text-xs" /></div>
@@ -321,7 +366,7 @@ const BungalowReads = () => {
                       <Card key={bungalow.id}>
                         <CardHeader><CardTitle>{bungalow.name}</CardTitle>
                           <CardDescription>
-                            Last reading: {latestRead ? new Date(latestRead.read_date!).toLocaleDateString() : "N/A"}
+                            Last reading: {latestRead ? format(parseISO(latestRead.read_date!), "M/d/yyyy") : "N/A"}
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">
