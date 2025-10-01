@@ -391,8 +391,12 @@ const BungalowReads = () => {
                               <p className="text-sm text-green-600 font-medium">✓ Water is balanced. No treatment needed.</p>
                             )}
                           </div>
-                          <Button className="w-full" onClick={() => handleLogTreatment(bungalow.id)} disabled={!suggestion}>
-                            Log Applied Treatment
+                          <Button
+                            className="w-full"
+                            onClick={() => handleLogTreatment(bungalow.id)}
+                            disabled={!suggestion || (suggestion.bicarb === 0 && suggestion.calcium === 0)}
+                          >
+                            Log Treatment
                           </Button>
                         </CardContent>
                       </Card>
