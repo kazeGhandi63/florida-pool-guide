@@ -94,6 +94,8 @@ const BungalowReads = () => {
   };
 
   const fetchLatestWeeklyReads = async (poolIds: string[]) => {
+    if (poolIds.length === 0) return;
+
     const { data, error } = await supabase
       .from("weekly_reads")
       .select("*")
@@ -106,7 +108,7 @@ const BungalowReads = () => {
     }
 
     const latestReadsByPool: Record<string, LatestWeeklyRead> = {};
-    for (const read of data) {
+    for (const read of data || []) {
       if (read.pool_id && !latestReadsByPool[read.pool_id]) {
         latestReadsByPool[read.pool_id] = read;
       }
@@ -114,13 +116,13 @@ const BungalowReads = () => {
     setLatestWeeklyReads(latestReadsByPool);
 
     const suggestions: Record<string, TreatmentSuggestion> = {};
-    for (const poolId in latestReadsByPool) {
+    poolIds.forEach(poolId => {
       const read = latestReadsByPool[poolId];
       suggestions[poolId] = {
-        bicarb: getBicarbTreatment(read.alkalinity),
-        calcium: getCalciumTreatment(read.calcium_hardness),
+        bicarb: getBicarbTreatment(read?.alkalinity),
+        calcium: getCalciumTreatment(read?.calcium_hardness),
       };
-    }
+    });
     setTreatmentSuggestions(suggestions);
   };
 
@@ -210,6 +212,7 @@ const BungalowReads = () => {
         resetWeekly[b.id] = { tds: "", alkalinity: "", calciumHardness: "", lsi: null };
       });
       setWeeklyReads(resetWeekly);
+      fetchLatestWeeklyReads(bungalows.map(b => b.id));
     }
   };
 
