@@ -41,6 +41,7 @@ const BungalowReads = () => {
   const [latestDailyReads, setLatestDailyReads] = useState<Record<string, LatestDailyRead>>({});
   const [latestWeeklyReads, setLatestWeeklyReads] = useState<Record<string, LatestWeeklyRead>>({});
   const [treatmentSuggestions, setTreatmentSuggestions] = useState<Record<string, TreatmentSuggestion>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchBungalows();
@@ -69,6 +70,7 @@ const BungalowReads = () => {
   };
 
   const fetchBungalows = async () => {
+    setLoading(true);
     const { data, error } = await supabase
       .from("pools")
       .select("*, resorts!inner(name)")
@@ -76,6 +78,7 @@ const BungalowReads = () => {
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
+      setLoading(false);
       return;
     }
     
@@ -109,16 +112,17 @@ const BungalowReads = () => {
         sortedData.forEach((b) => {
           const lastRead = latestReadsByPool[b.id];
           initialReads[b.id] = {
-            chlorine: lastRead?.chlorine?.toString() ?? "",
-            ph: lastRead?.ph?.toString() ?? "",
-            temperature: lastRead?.temperature?.toString() ?? "",
-            flow: lastRead?.flow?.toString() ?? "",
+            chlorine: lastRead?.chlorine != null ? lastRead.chlorine.toString() : "",
+            ph: lastRead?.ph != null ? lastRead.ph.toString() : "",
+            temperature: lastRead?.temperature != null ? lastRead.temperature.toString() : "",
+            flow: lastRead?.flow != null ? lastRead.flow.toString() : "",
           };
         });
         setReads(initialReads);
       }
     }
-    fetchLatestWeeklyReads(poolIds);
+    await fetchLatestWeeklyReads(poolIds);
+    setLoading(false);
   };
 
   const fetchLatestWeeklyReads = async (poolIds: string[]) => {
@@ -147,9 +151,9 @@ const BungalowReads = () => {
     poolIds.forEach(poolId => {
       const read = latestReadsByPool[poolId];
       initialWeeklyReads[poolId] = {
-        tds: read?.tds?.toString() ?? "",
-        alkalinity: read?.alkalinity?.toString() ?? "",
-        calciumHardness: read?.calcium_hardness?.toString() ?? "",
+        tds: read?.tds != null ? read.tds.toString() : "",
+        alkalinity: read?.alkalinity != null ? read.alkalinity.toString() : "",
+        calciumHardness: read?.calcium_hardness != null ? read.calcium_hardness.toString() : "",
         lsi: read?.saturation_index ?? null,
       };
     });
@@ -332,6 +336,8 @@ const BungalowReads = () => {
       </div>
     );
   };
+
+  if (loading) return <div className="flex min-h-screen items-center justify-center">Loading Bungalow data...</div>;
 
   return (
     <div className="min-h-screen bg-background p-4">

@@ -130,18 +130,18 @@ const ResortReads = () => {
         sortedPools.forEach((pool) => {
           const lastDaily = latestDailyByPool[pool.id];
           initialReads[pool.id] = {
-            chlorine: lastDaily?.chlorine?.toString() ?? "",
-            ph: lastDaily?.ph?.toString() ?? "",
-            temperature: lastDaily?.temperature?.toString() ?? "",
-            flow: lastDaily?.flow?.toString() ?? "",
-            influent: lastDaily?.influent?.toString() ?? "",
-            effluent: lastDaily?.effluent?.toString() ?? "",
+            chlorine: lastDaily?.chlorine != null ? lastDaily.chlorine.toString() : "",
+            ph: lastDaily?.ph != null ? lastDaily.ph.toString() : "",
+            temperature: lastDaily?.temperature != null ? lastDaily.temperature.toString() : "",
+            flow: lastDaily?.flow != null ? lastDaily.flow.toString() : "",
+            influent: lastDaily?.influent != null ? lastDaily.influent.toString() : "",
+            effluent: lastDaily?.effluent != null ? lastDaily.effluent.toString() : "",
           };
           const lastWeekly = latestWeeklyByPool[pool.id];
           initialWeeklyReads[pool.id] = {
-            tds: lastWeekly?.tds?.toString() ?? "",
-            alkalinity: lastWeekly?.alkalinity?.toString() ?? "",
-            calciumHardness: lastWeekly?.calcium_hardness?.toString() ?? "",
+            tds: lastWeekly?.tds != null ? lastWeekly.tds.toString() : "",
+            alkalinity: lastWeekly?.alkalinity != null ? lastWeekly.alkalinity.toString() : "",
+            calciumHardness: lastWeekly?.calcium_hardness != null ? lastWeekly.calcium_hardness.toString() : "",
             lsi: lastWeekly?.saturation_index ?? null,
           };
         });
