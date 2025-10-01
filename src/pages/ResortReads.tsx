@@ -50,6 +50,7 @@ const ResortReads = () => {
   const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReads>>({});
   const [latestDailyReads, setLatestDailyReads] = useState<Record<string, LatestDailyRead>>({});
   const [latestWeeklyReads, setLatestWeeklyReads] = useState<Record<string, LatestWeeklyRead>>({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchResortAndPools();
@@ -62,6 +63,7 @@ const ResortReads = () => {
   };
 
   const fetchResortAndPools = async () => {
+    setLoading(true);
     const { data: resortData, error: resortError } = await supabase
       .from("resorts")
       .select("*")
@@ -69,7 +71,14 @@ const ResortReads = () => {
       .single();
 
     if (resortError) {
-      toast({ title: "Error", description: resortError.message, variant: "destructive" });
+      toast({ title: "Error fetching resort", description: resortError.message, variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    if (!resortData) {
+      toast({ title: "Not Found", description: "The requested resort could not be found.", variant: "destructive" });
+      setLoading(false);
       return;
     }
 
@@ -82,7 +91,7 @@ const ResortReads = () => {
       .order("name");
 
     if (poolsError) {
-      toast({ title: "Error", description: poolsError.message, variant: "destructive" });
+      toast({ title: "Error fetching pools", description: poolsError.message, variant: "destructive" });
     } else {
       let sortedPools = poolsData || [];
       if (resortData.name === "Grand Floridian") {
@@ -140,6 +149,7 @@ const ResortReads = () => {
         setWeeklyReads(initialWeeklyReads);
       }
     }
+    setLoading(false);
   };
 
   const handleInputChange = (poolId: string, field: keyof PoolReads, value: string) => {
@@ -247,7 +257,8 @@ const ResortReads = () => {
     window.print();
   };
 
-  if (!resort) return <div>Loading...</div>;
+  if (loading) return <div className="flex min-h-screen items-center justify-center">Loading resort data...</div>;
+  if (!resort) return <div className="flex min-h-screen items-center justify-center">Resort not found. Please return to the dashboard and try again.</div>;
 
   return (
     <div className="min-h-screen bg-background p-4">
