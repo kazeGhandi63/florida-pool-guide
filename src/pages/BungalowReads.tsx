@@ -279,9 +279,9 @@ const BungalowReads = () => {
             <Card key={bungalow.id} className="print:break-inside-avoid print:shadow-none">
               <CardHeader className="py-2 print:py-1">
                 <CardTitle className="text-sm print:text-xs">{bungalow.name}</CardTitle>
-                {latestDailyReads[bungalow.id] && (
+                {latestDailyReads[bungalow.id] && latestDailyReads[bungalow.id].read_date && (
                   <CardDescription className="text-xs">
-                    Last: {format(parseISO(latestDailyReads[bungalow.id].read_date!), "M/d/yy")}
+                    Last: {format(parseISO(latestDailyReads[bungalow.id].read_date), "M/d/yy")}
                   </CardDescription>
                 )}
               </CardHeader>
@@ -310,9 +310,9 @@ const BungalowReads = () => {
             <Card key={bungalow.id} className="print:break-inside-avoid print:shadow-none">
               <CardHeader className="py-2 print:py-1">
                 <CardTitle className="text-sm print:text-xs">{bungalow.name}</CardTitle>
-                {latestWeeklyReads[bungalow.id] && (
+                {latestWeeklyReads[bungalow.id] && latestWeeklyReads[bungalow.id].read_date && (
                   <CardDescription className="text-xs">
-                    Last: {format(parseISO(latestWeeklyReads[bungalow.id].read_date!), "M/d/yy")}
+                    Last: {format(parseISO(latestWeeklyReads[bungalow.id].read_date), "M/d/yy")}
                   </CardDescription>
                 )}
               </CardHeader>
@@ -366,7 +366,7 @@ const BungalowReads = () => {
                       <Card key={bungalow.id}>
                         <CardHeader><CardTitle>{bungalow.name}</CardTitle>
                           <CardDescription>
-                            Last reading: {latestRead ? format(parseISO(latestRead.read_date!), "M/d/yyyy") : "N/A"}
+                            Last reading: {latestRead && latestRead.read_date ? format(parseISO(latestRead.read_date), "M/d/yyyy") : "N/A"}
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-4">

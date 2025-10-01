@@ -278,9 +278,9 @@ const ResortReads = () => {
                   <Card key={pool.id} className="print:break-inside-avoid print:shadow-none print:mb-1">
                     <CardHeader className="py-2 print:py-1">
                       <CardTitle className="text-base print:text-sm">{pool.name}</CardTitle>
-                      {latestDailyReads[pool.id] && (
+                      {latestDailyReads[pool.id] && latestDailyReads[pool.id].read_date && (
                         <CardDescription className="text-xs">
-                          Last: {format(parseISO(latestDailyReads[pool.id].read_date!), "M/d/yy")}
+                          Last: {format(parseISO(latestDailyReads[pool.id].read_date), "M/d/yy")}
                         </CardDescription>
                       )}
                     </CardHeader>
@@ -370,9 +370,9 @@ const ResortReads = () => {
                   <Card key={pool.id} className="print:break-inside-avoid print:shadow-none">
                     <CardHeader className="print:py-2">
                       <CardTitle className="text-lg print:text-base">{pool.name}</CardTitle>
-                      {latestWeeklyReads[pool.id] && (
+                      {latestWeeklyReads[pool.id] && latestWeeklyReads[pool.id].read_date && (
                         <CardDescription className="text-xs">
-                          Last: {format(parseISO(latestWeeklyReads[pool.id].read_date!), "M/d/yy")}
+                          Last: {format(parseISO(latestWeeklyReads[pool.id].read_date), "M/d/yy")}
                         </CardDescription>
                       )}
                     </CardHeader>
