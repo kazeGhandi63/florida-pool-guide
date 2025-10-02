@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tables } from "@/integrations/supabase/types";
 import { format, parseISO, getDay, setDay } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type Pool = {
   id: string;
@@ -59,10 +60,10 @@ const ResortReads = () => {
   }, [resortId]);
 
   useEffect(() => {
-    if (pools.length > 0 && activeTab !== "weekly") {
+    if (!loading && pools.length > 0 && activeTab !== "weekly") {
       fetchReadsForDay(activeTab, pools);
     }
-  }, [activeTab, pools]);
+  }, [activeTab, loading, pools]);
 
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -88,21 +89,19 @@ const ResortReads = () => {
       return;
     }
 
-    setReads(prevReads => {
-      const newReads = { ...prevReads };
-      currentPools.forEach(pool => {
-        const existingRead = dailyData?.find(r => r.pool_id === pool.id);
-        newReads[pool.id] = {
-          chlorine: existingRead?.chlorine?.toString() ?? "",
-          ph: existingRead?.ph?.toString() ?? "",
-          temperature: existingRead?.temperature?.toString() ?? "",
-          flow: existingRead?.flow?.toString() ?? "",
-          influent: existingRead?.influent?.toString() ?? "",
-          effluent: existingRead?.effluent?.toString() ?? "",
-        };
-      });
-      return newReads;
+    const newReads: Record<string, PoolReads> = {};
+    currentPools.forEach(pool => {
+      const existingRead = dailyData?.find(r => r.pool_id === pool.id);
+      newReads[pool.id] = {
+        chlorine: existingRead?.chlorine?.toString() ?? "",
+        ph: existingRead?.ph?.toString() ?? "",
+        temperature: existingRead?.temperature?.toString() ?? "",
+        flow: existingRead?.flow?.toString() ?? "",
+        influent: existingRead?.influent?.toString() ?? "",
+        effluent: existingRead?.effluent?.toString() ?? "",
+      };
     });
+    setReads(newReads);
   };
 
   const fetchResortAndPools = async () => {
@@ -131,15 +130,16 @@ const ResortReads = () => {
       setPools(sortedPools);
 
       const initialReads: Record<string, PoolReads> = {};
+      const initialWeeklyReads: Record<string, WeeklyReads> = {};
       sortedPools.forEach(pool => {
         initialReads[pool.id] = { chlorine: "", ph: "", temperature: "", flow: "", influent: "", effluent: "" };
+        initialWeeklyReads[pool.id] = { tds: "", alkalinity: "", calciumHardness: "", lsi: null };
       });
       setReads(initialReads);
+      setWeeklyReads(initialWeeklyReads);
 
       if (sortedPools.length > 0) {
-        const currentDay = weekdays[getDay(new Date())];
-        fetchReadsForDay(currentDay, sortedPools);
-        fetchLatestWeeklyReads(sortedPools);
+        await fetchLatestWeeklyReads(sortedPools);
       }
     }
     setLoading(false);
@@ -156,17 +156,19 @@ const ResortReads = () => {
     }
     setLatestWeeklyReads(latestWeeklyByPool);
 
-    const initialWeeklyReads: Record<string, WeeklyReads> = {};
-    currentPools.forEach((pool) => {
-      const lastWeekly = latestWeeklyByPool[pool.id];
-      initialWeeklyReads[pool.id] = {
-        tds: lastWeekly?.tds != null ? lastWeekly.tds.toString() : "",
-        alkalinity: lastWeekly?.alkalinity != null ? lastWeekly.alkalinity.toString() : "",
-        calciumHardness: lastWeekly?.calcium_hardness != null ? lastWeekly.calcium_hardness.toString() : "",
-        lsi: lastWeekly?.saturation_index ?? null,
-      };
+    setWeeklyReads(prev => {
+      const newWeeklyReads = { ...prev };
+      currentPools.forEach((pool) => {
+        const lastWeekly = latestWeeklyByPool[pool.id];
+        newWeeklyReads[pool.id] = {
+          tds: lastWeekly?.tds != null ? lastWeekly.tds.toString() : "",
+          alkalinity: lastWeekly?.alkalinity != null ? lastWeekly.alkalinity.toString() : "",
+          calciumHardness: lastWeekly?.calcium_hardness != null ? lastWeekly.calcium_hardness.toString() : "",
+          lsi: lastWeekly?.saturation_index ?? null,
+        };
+      });
+      return newWeeklyReads;
     });
-    setWeeklyReads(initialWeeklyReads);
   };
 
   const handleInputChange = (poolId: string, field: keyof PoolReads, value: string) => {
@@ -258,7 +260,18 @@ const ResortReads = () => {
 
   const handlePrint = () => window.print();
 
-  if (loading) return <div className="flex min-h-screen items-center justify-center">Loading resort data...</div>;
+  const renderSkeletons = () => (
+    <div className="space-y-4 mt-6">
+      {[...Array(4)].map((_, i) => (
+        <Card key={i}>
+          <CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
+          <CardContent><Skeleton className="h-10 w-full" /></CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+
+  if (loading) return <div className="min-h-screen bg-background p-4"><div className="max-w-6xl mx-auto">{renderSkeletons()}</div></div>;
   if (!resort) return <div className="flex min-h-screen items-center justify-center">Resort not found.</div>;
 
   const DailyReadsForm = ({ day }: { day: string }) => (
@@ -266,23 +279,27 @@ const ResortReads = () => {
       <div className="flex justify-end mb-4 print:hidden">
         <Button onClick={handleSaveDailyReads}>Save Reads for {day}</Button>
       </div>
-      {pools.map((pool) => (
-        <Card key={pool.id} className="print:break-inside-avoid print:shadow-none print:mb-1">
-          <CardHeader className="py-2 print:py-1"><CardTitle className="text-base print:text-sm">{pool.name}</CardTitle></CardHeader>
-          <CardContent className="py-2 print:py-1">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 print:gap-1">
-              <div className="space-y-1"><Label htmlFor={`${pool.id}-chlorine`} className="text-xs print:text-[10px]">Chlorine</Label><Input id={`${pool.id}-chlorine`} type="number" step="0.01" value={reads[pool.id]?.chlorine || ""} onChange={(e) => handleInputChange(pool.id, "chlorine", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-              <div className="space-y-1"><Label htmlFor={`${pool.id}-ph`} className="text-xs print:text-[10px]">pH</Label><Input id={`${pool.id}-ph`} type="number" step="0.01" value={reads[pool.id]?.ph || ""} onChange={(e) => handleInputChange(pool.id, "ph", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-              <div className="space-y-1"><Label htmlFor={`${pool.id}-temperature`} className="text-xs print:text-[10px]">Temperature</Label><Input id={`${pool.id}-temperature`} type="number" step="0.1" value={reads[pool.id]?.temperature || ""} onChange={(e) => handleInputChange(pool.id, "temperature", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-              <div className="space-y-1"><Label htmlFor={`${pool.id}-flow`} className="text-xs print:text-[10px]">Flow</Label><Input id={`${pool.id}-flow`} type="number" step="0.01" value={reads[pool.id]?.flow || ""} onChange={(e) => handleInputChange(pool.id, "flow", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-              {pool.pool_type === "standard" && (<>
-                <div className="space-y-1"><Label htmlFor={`${pool.id}-influent`} className="text-xs print:text-[10px]">Influent</Label><Input id={`${pool.id}-influent`} type="number" step="0.01" value={reads[pool.id]?.influent || ""} onChange={(e) => handleInputChange(pool.id, "influent", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-                <div className="space-y-1"><Label htmlFor={`${pool.id}-effluent`} className="text-xs print:text-[10px]">Effluent</Label><Input id={`${pool.id}-effluent`} type="number" step="0.01" value={reads[pool.id]?.effluent || ""} onChange={(e) => handleInputChange(pool.id, "effluent", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-              </>)}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+      {pools.map((pool) => {
+        const poolReadData = reads[pool.id];
+        if (!poolReadData) return null;
+        return (
+          <Card key={pool.id} className="print:break-inside-avoid print:shadow-none print:mb-1">
+            <CardHeader className="py-2 print:py-1"><CardTitle className="text-base print:text-sm">{pool.name}</CardTitle></CardHeader>
+            <CardContent className="py-2 print:py-1">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 print:gap-1">
+                <div className="space-y-1"><Label htmlFor={`${pool.id}-chlorine`} className="text-xs print:text-[10px]">Chlorine</Label><Input id={`${pool.id}-chlorine`} type="number" step="0.01" value={poolReadData.chlorine} onChange={(e) => handleInputChange(pool.id, "chlorine", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
+                <div className="space-y-1"><Label htmlFor={`${pool.id}-ph`} className="text-xs print:text-[10px]">pH</Label><Input id={`${pool.id}-ph`} type="number" step="0.01" value={poolReadData.ph} onChange={(e) => handleInputChange(pool.id, "ph", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
+                <div className="space-y-1"><Label htmlFor={`${pool.id}-temperature`} className="text-xs print:text-[10px]">Temperature</Label><Input id={`${pool.id}-temperature`} type="number" step="0.1" value={poolReadData.temperature} onChange={(e) => handleInputChange(pool.id, "temperature", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
+                <div className="space-y-1"><Label htmlFor={`${pool.id}-flow`} className="text-xs print:text-[10px]">Flow</Label><Input id={`${pool.id}-flow`} type="number" step="0.01" value={poolReadData.flow} onChange={(e) => handleInputChange(pool.id, "flow", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
+                {pool.pool_type === "standard" && (<>
+                  <div className="space-y-1"><Label htmlFor={`${pool.id}-influent`} className="text-xs print:text-[10px]">Influent</Label><Input id={`${pool.id}-influent`} type="number" step="0.01" value={poolReadData.influent} onChange={(e) => handleInputChange(pool.id, "influent", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
+                  <div className="space-y-1"><Label htmlFor={`${pool.id}-effluent`} className="text-xs print:text-[10px]">Effluent</Label><Input id={`${pool.id}-effluent`} type="number" step="0.01" value={poolReadData.effluent} onChange={(e) => handleInputChange(pool.id, "effluent", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
+                </>)}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 
@@ -304,23 +321,27 @@ const ResortReads = () => {
               {weekdays.map(day => <TabsContent key={day} value={day}><DailyReadsForm day={day} /></TabsContent>)}
               <TabsContent value="weekly" className="space-y-4 print:space-y-2 mt-6">
                 <div className="flex justify-end mb-4 print:hidden"><Button onClick={handleSaveWeekly}>Save All Weekly Reads</Button></div>
-                {pools.map((pool) => (
-                  <Card key={pool.id} className="print:break-inside-avoid print:shadow-none">
-                    <CardHeader className="print:py-2"><CardTitle className="text-lg print:text-base">{pool.name}</CardTitle>
-                      {latestWeeklyReads[pool.id] && latestWeeklyReads[pool.id].read_date && (<CardDescription className="text-xs">Last: {format(parseISO(latestWeeklyReads[pool.id].read_date), "M/d/yy")}</CardDescription>)}
-                    </CardHeader>
-                    <CardContent className="print:py-2">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:gap-2">
-                        <div className="space-y-1"><Label htmlFor={`${pool.id}-tds`} className="text-xs">TDS</Label><Input id={`${pool.id}-tds`} type="number" step="0.01" value={weeklyReads[pool.id]?.tds || ""} onChange={(e) => handleWeeklyInputChange(pool.id, "tds", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
-                        <div className="space-y-1"><Label htmlFor={`${pool.id}-alkalinity`} className="text-xs">Alkalinity</Label><Input id={`${pool.id}-alkalinity`} type="number" step="0.01" value={weeklyReads[pool.id]?.alkalinity || ""} onChange={(e) => handleWeeklyInputChange(pool.id, "alkalinity", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
-                        <div className="space-y-1"><Label htmlFor={`${pool.id}-calcium`} className="text-xs">Calcium Hardness</Label><Input id={`${pool.id}-calcium`} type="number" step="0.01" value={weeklyReads[pool.id]?.calciumHardness || ""} onChange={(e) => handleWeeklyInputChange(pool.id, "calciumHardness", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
-                        <div className="space-y-1"><Label htmlFor={`${pool.id}-lsi`} className="text-xs">Saturation Index (LSI)</Label><Input id={`${pool.id}-lsi`} type="number" step="0.01" value={weeklyReads[pool.id]?.lsi !== null ? weeklyReads[pool.id].lsi : ""} readOnly placeholder="Auto-calculated" className="h-9 print:h-8 text-sm bg-muted" />
-                          {weeklyReads[pool.id]?.lsi !== null && (<p className="text-xs mt-1">{weeklyReads[pool.id].lsi! < -0.5 ? (<span className="text-destructive font-medium">⚠️ Corrosive - Needs Treatment</span>) : weeklyReads[pool.id].lsi! > 0.5 ? (<span className="text-destructive font-medium">⚠️ Scale-Forming - Needs Treatment</span>) : (<span className="text-green-600 font-medium">✓ Balanced - No Treatment Needed</span>)}</p>)}
+                {pools.map((pool) => {
+                  const weeklyReadData = weeklyReads[pool.id];
+                  if (!weeklyReadData) return null;
+                  return (
+                    <Card key={pool.id} className="print:break-inside-avoid print:shadow-none">
+                      <CardHeader className="print:py-2"><CardTitle className="text-lg print:text-base">{pool.name}</CardTitle>
+                        {latestWeeklyReads[pool.id] && latestWeeklyReads[pool.id].read_date && (<CardDescription className="text-xs">Last: {format(parseISO(latestWeeklyReads[pool.id].read_date), "M/d/yy")}</CardDescription>)}
+                      </CardHeader>
+                      <CardContent className="print:py-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:gap-2">
+                          <div className="space-y-1"><Label htmlFor={`${pool.id}-tds`} className="text-xs">TDS</Label><Input id={`${pool.id}-tds`} type="number" step="0.01" value={weeklyReadData.tds} onChange={(e) => handleWeeklyInputChange(pool.id, "tds", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
+                          <div className="space-y-1"><Label htmlFor={`${pool.id}-alkalinity`} className="text-xs">Alkalinity</Label><Input id={`${pool.id}-alkalinity`} type="number" step="0.01" value={weeklyReadData.alkalinity} onChange={(e) => handleWeeklyInputChange(pool.id, "alkalinity", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
+                          <div className="space-y-1"><Label htmlFor={`${pool.id}-calcium`} className="text-xs">Calcium Hardness</Label><Input id={`${pool.id}-calcium`} type="number" step="0.01" value={weeklyReadData.calciumHardness} onChange={(e) => handleWeeklyInputChange(pool.id, "calciumHardness", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
+                          <div className="space-y-1"><Label htmlFor={`${pool.id}-lsi`} className="text-xs">Saturation Index (LSI)</Label><Input id={`${pool.id}-lsi`} type="number" step="0.01" value={weeklyReadData.lsi !== null ? weeklyReadData.lsi : ""} readOnly placeholder="Auto-calculated" className="h-9 print:h-8 text-sm bg-muted" />
+                            {weeklyReadData.lsi !== null && (<p className="text-xs mt-1">{weeklyReadData.lsi! < -0.5 ? (<span className="text-destructive font-medium">⚠️ Corrosive - Needs Treatment</span>) : weeklyReadData.lsi! > 0.5 ? (<span className="text-destructive font-medium">⚠️ Scale-Forming - Needs Treatment</span>) : (<span className="text-green-600 font-medium">✓ Balanced - No Treatment Needed</span>)}</p>)}
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </TabsContent>
             </Tabs>
           </CardContent>
