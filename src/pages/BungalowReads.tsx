@@ -267,7 +267,7 @@ const BungalowReads = () => {
     if (error) {
       toast({
         title: "Error Logging Treatment",
-        description: error.message,
+        description: "The database schema might be out of sync. Please try again after a few moments.",
         variant: "destructive",
       });
     } else {
