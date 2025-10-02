@@ -51,7 +51,6 @@ const ResortReads = () => {
   const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReads>>({});
   const [latestWeeklyReads, setLatestWeeklyReads] = useState<Record<string, LatestWeeklyRead>>({});
   const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState<string>(() => weekdays[getDay(new Date())]);
   const [activeTab, setActiveTab] = useState<string>(() => weekdays[getDay(new Date())]);
 
   useEffect(() => {
@@ -61,7 +60,7 @@ const ResortReads = () => {
 
   useEffect(() => {
     if (pools.length > 0 && activeTab !== "weekly") {
-      fetchReadsForDay(activeTab, pools.map(p => p.id));
+      fetchReadsForDay(activeTab, pools);
     }
   }, [activeTab, pools]);
 
@@ -70,7 +69,8 @@ const ResortReads = () => {
     if (user) setUserId(user.id);
   };
 
-  const fetchReadsForDay = async (day: string, poolIds: string[]) => {
+  const fetchReadsForDay = async (day: string, currentPools: Pool[]) => {
+    const poolIds = currentPools.map(p => p.id);
     if (poolIds.length === 0) return;
 
     const dayIndex = weekdays.indexOf(day);
@@ -88,19 +88,21 @@ const ResortReads = () => {
       return;
     }
 
-    const newReads: Record<string, PoolReads> = {};
-    pools.forEach(pool => {
-      const existingRead = dailyData?.find(r => r.pool_id === pool.id);
-      newReads[pool.id] = {
-        chlorine: existingRead?.chlorine?.toString() ?? "",
-        ph: existingRead?.ph?.toString() ?? "",
-        temperature: existingRead?.temperature?.toString() ?? "",
-        flow: existingRead?.flow?.toString() ?? "",
-        influent: existingRead?.influent?.toString() ?? "",
-        effluent: existingRead?.effluent?.toString() ?? "",
-      };
+    setReads(prevReads => {
+      const newReads = { ...prevReads };
+      currentPools.forEach(pool => {
+        const existingRead = dailyData?.find(r => r.pool_id === pool.id);
+        newReads[pool.id] = {
+          chlorine: existingRead?.chlorine?.toString() ?? "",
+          ph: existingRead?.ph?.toString() ?? "",
+          temperature: existingRead?.temperature?.toString() ?? "",
+          flow: existingRead?.flow?.toString() ?? "",
+          influent: existingRead?.influent?.toString() ?? "",
+          effluent: existingRead?.effluent?.toString() ?? "",
+        };
+      });
+      return newReads;
     });
-    setReads(newReads);
   };
 
   const fetchResortAndPools = async () => {
@@ -127,16 +129,26 @@ const ResortReads = () => {
         });
       }
       setPools(sortedPools);
-      const poolIds = sortedPools.map(p => p.id);
-      if (poolIds.length > 0) {
-        fetchReadsForDay(selectedDay, poolIds);
-        fetchLatestWeeklyReads(poolIds);
+
+      const initialReads: Record<string, PoolReads> = {};
+      sortedPools.forEach(pool => {
+        initialReads[pool.id] = { chlorine: "", ph: "", temperature: "", flow: "", influent: "", effluent: "" };
+      });
+      setReads(initialReads);
+
+      if (sortedPools.length > 0) {
+        const currentDay = weekdays[getDay(new Date())];
+        fetchReadsForDay(currentDay, sortedPools);
+        fetchLatestWeeklyReads(sortedPools);
       }
     }
     setLoading(false);
   };
 
-  const fetchLatestWeeklyReads = async (poolIds: string[]) => {
+  const fetchLatestWeeklyReads = async (currentPools: Pool[]) => {
+    if (currentPools.length === 0) return;
+    const poolIds = currentPools.map(p => p.id);
+
     const { data: weeklyData } = await supabase.from("weekly_reads").select("*").in("pool_id", poolIds).order("read_date", { ascending: false });
     const latestWeeklyByPool: Record<string, LatestWeeklyRead> = {};
     for (const read of weeklyData || []) {
@@ -145,7 +157,7 @@ const ResortReads = () => {
     setLatestWeeklyReads(latestWeeklyByPool);
 
     const initialWeeklyReads: Record<string, WeeklyReads> = {};
-    pools.forEach((pool) => {
+    currentPools.forEach((pool) => {
       const lastWeekly = latestWeeklyByPool[pool.id];
       initialWeeklyReads[pool.id] = {
         tds: lastWeekly?.tds != null ? lastWeekly.tds.toString() : "",
@@ -240,7 +252,7 @@ const ResortReads = () => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success", description: "All weekly reads saved!" });
-      fetchLatestWeeklyReads(pools.map(p => p.id));
+      fetchLatestWeeklyReads(pools);
     }
   };
 
