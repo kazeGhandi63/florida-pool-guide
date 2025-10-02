@@ -1,32 +1,46 @@
-create table "public"."treatments" (
-    "id" uuid not null default gen_random_uuid(),
-    "created_at" timestamp with time zone not null default now(),
-    "pool_id" uuid not null,
-    "user_id" uuid not null,
-    "bicarb_cups_added" real,
-    "calcium_cups_added" real,
-    "treatment_date" date not null default now()
+-- Create the treatments table
+CREATE TABLE IF NOT EXISTS public.treatments (
+    id uuid NOT NULL DEFAULT gen_random_uuid(),
+    created_at timestamp with time zone NOT NULL DEFAULT now(),
+    pool_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    bicarb_cups_added numeric,
+    calcium_cups_added numeric,
+    treatment_date date NOT NULL DEFAULT CURRENT_DATE,
+    CONSTRAINT treatments_pkey PRIMARY KEY (id),
+    CONSTRAINT treatments_pool_id_fkey FOREIGN KEY (pool_id) REFERENCES public.pools(id) ON DELETE CASCADE,
+    CONSTRAINT treatments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE
 );
 
+-- Enable Row Level Security
+ALTER TABLE public.treatments ENABLE ROW LEVEL SECURITY;
 
-alter table "public"."treatments" enable row level security;
+-- Create policies for treatments table
+-- Allow authenticated users to insert their own treatments
+CREATE POLICY "Allow authenticated users to insert their own treatments"
+ON public.treatments
+FOR INSERT
+TO authenticated
+WITH CHECK (auth.uid() = user_id);
 
-CREATE UNIQUE INDEX treatments_pkey ON public.treatments USING btree (id);
+-- Allow users to view their own treatments
+CREATE POLICY "Allow users to view their own treatments"
+ON public.treatments
+FOR SELECT
+TO authenticated
+USING (auth.uid() = user_id);
 
-alter table "public"."treatments" add constraint "treatments_pkey" PRIMARY KEY using index "treatments_pkey";
+-- Allow users to update their own treatments
+CREATE POLICY "Allow users to update their own treatments"
+ON public.treatments
+FOR UPDATE
+TO authenticated
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
 
-alter table "public"."treatments" add constraint "treatments_pool_id_fkey" FOREIGN KEY (pool_id) REFERENCES pools(id) on delete cascade not valid;
-
-alter table "public"."treatments" validate constraint "treatments_pool_id_fkey";
-
-alter table "public"."treatments" add constraint "treatments_user_id_fkey" FOREIGN KEY (user_id) REFERENCES profiles(id) on delete cascade not valid;
-
-alter table "public"."treatments" validate constraint "treatments_user_id_fkey";
-
-create policy "Allow authenticated users to manage their own treatments"
-on "public"."treatments"
-as permissive
-for all
-to authenticated
-using ((auth.uid() = user_id))
-with check ((auth.uid() = user_id));
+-- Allow users to delete their own treatments
+CREATE POLICY "Allow users to delete their own treatments"
+ON public.treatments
+FOR DELETE
+TO authenticated
+USING (auth.uid() = user_id);
