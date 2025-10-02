@@ -266,10 +266,9 @@ const BungalowReads = () => {
     });
     if (error) {
       toast({
-        title: "Database Error",
-        description: `Could not log treatment. The 'treatments' table might be missing. Please try rebuilding the app to apply database migrations. Original error: ${error.message}`,
+        title: "Error Logging Treatment",
+        description: error.message,
         variant: "destructive",
-        duration: 9000,
       });
     } else {
       toast({ title: "Success", description: `Treatment for ${bungalows.find(b => b.id === poolId)?.name} logged!` });
