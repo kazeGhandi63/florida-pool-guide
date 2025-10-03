@@ -254,8 +254,7 @@ const BungalowReads = () => {
   const handleLogTreatment = async (poolId: string) => {
     if (!userId || !treatmentSuggestions[poolId]) return;
     const suggestion = treatmentSuggestions[poolId];
-    const latestRead = latestWeeklyReads[poolId];
-
+    
     if (suggestion.bicarb === 0 && suggestion.calcium === 0) {
       toast({ title: "No treatment needed", description: "Water is balanced according to the rules." });
       return;
@@ -264,10 +263,8 @@ const BungalowReads = () => {
     const treatmentData: any = {
       bungalow_id: poolId,
       user_id: userId,
-      alkalinity_reading: latestRead?.alkalinity,
-      calcium_reading: latestRead?.calcium_hardness,
-      alkalinity_treatment_cups: suggestion.bicarb,
-      calcium_treatment_cups: suggestion.calcium,
+      bicarb_cups_added: suggestion.bicarb,
+      calcium_cups_added: suggestion.calcium,
     };
 
     const { error } = await supabase.from("treatments").insert(treatmentData);
