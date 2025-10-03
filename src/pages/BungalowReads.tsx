@@ -7,41 +7,31 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Tables } from "@/integrations/supabase/types";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Droplet, GlassWater, CheckCircle } from "lucide-react";
+import { format } from "date-fns";
 
-type Bungalow = Tables<"pools">;
-
-type DailyReadValues = {
-  chlorine?: string;
-  ph?: string;
-  temperature?: string;
-  flow?: string;
-  acid?: boolean;
-  chlorine_add?: boolean; // To avoid conflict with the 'chlorine' reading field
-  work_order_temp?: string;
-  work_order_flow?: string;
-};
-
-type WeeklyReadValues = {
-  tds?: string;
-  alkalinity?: string;
-  calcium_hardness?: string;
-  saturation_index?: string;
-};
+type Bungalow = Tables<"bungalows">;
+type Treatment = Tables<"treatments">;
+type BungalowWithTreatment = Bungalow & { last_treatment: Treatment | null };
 
 const BungalowReads = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [bungalows, setBungalows] = useState<Bungalow[]>([]);
+  const [bungalows, setBungalows] = useState<BungalowWithTreatment[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [dailyReads, setDailyReads] = useState<Record<string, DailyReadValues>>({});
-  const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReadValues>>({});
   const [loading, setLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [selectedBungalow, setSelectedBungalow] = useState<Bungalow | null>(null);
+  const [newReadings, setNewReadings] = useState({ alkalinity: "", calcium: "" });
 
   useEffect(() => {
-    fetchUser();
-    fetchBungalows();
+    const init = async () => {
+      await fetchUser();
+      await fetchBungalowsAndTreatments();
+    };
+    init();
   }, []);
 
   const fetchUser = async () => {
@@ -49,203 +39,201 @@ const BungalowReads = () => {
     if (user) setUserId(user.id);
   };
 
-  const fetchBungalows = async () => {
+  const fetchBungalowsAndTreatments = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("pools")
-      .select("*, resorts!inner(name)")
-      .eq("resorts.name", "Polynesian Bungalows");
+    const { data: bungalowsData, error: bungalowsError } = await supabase.from("bungalows").select("*").order("name");
 
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+    if (bungalowsError) {
+      toast({ title: "Error fetching bungalows", description: bungalowsError.message, variant: "destructive" });
       setLoading(false);
       return;
     }
-    
-    const sortedData = (data || []).sort((a, b) => {
-      const numA = parseInt(a.name.match(/\d+/)?.[0] || "0");
-      const numB = parseInt(b.name.match(/\d+/)?.[0] || "0");
-      return numA - numB;
-    });
-    setBungalows(sortedData);
-    
-    const initialDailyReads: Record<string, DailyReadValues> = {};
-    sortedData.forEach(b => {
-      initialDailyReads[b.id] = {};
-    });
-    setDailyReads(initialDailyReads);
 
-    const initialWeeklyReads: Record<string, WeeklyReadValues> = {};
-    sortedData.forEach(b => {
-      initialWeeklyReads[b.id] = {};
-    });
-    setWeeklyReads(initialWeeklyReads);
+    const bungalowsWithTreatments = await Promise.all(
+      bungalowsData.map(async (bungalow) => {
+        const { data: treatmentData, error: treatmentError } = await supabase
+          .from("treatments")
+          .select("*")
+          .eq("bungalow_id", bungalow.id)
+          .order("treatment_date", { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (treatmentError && treatmentError.code !== 'PGRST116') { // Ignore 'not found' errors
+          console.error(`Error fetching treatment for bungalow ${bungalow.id}:`, treatmentError.message);
+        }
 
+        return { ...bungalow, last_treatment: treatmentData };
+      })
+    );
+
+    setBungalows(bungalowsWithTreatments);
     setLoading(false);
   };
 
-  const handleDailyChange = (bungalowId: string, field: keyof DailyReadValues, value: string | boolean) => {
-    setDailyReads((prev) => ({
-      ...prev,
-      [bungalowId]: { ...prev[bungalowId], [field]: value },
-    }));
+  const calculateTreatment = (alkalinity: number | null, calcium: number | null) => {
+    const suggestions = [];
+    let isBalanced = true;
+
+    const alk = alkalinity ?? 0;
+    const calc = calcium ?? 0;
+
+    if (alkalinity !== null && alk < 80) {
+      const bicarbCups = Math.round((80 - alk) / 20);
+      if (bicarbCups > 0) {
+        suggestions.push({ chemical: "Bicarb", cups: bicarbCups, icon: Droplet });
+        isBalanced = false;
+      }
+    }
+
+    if (calcium !== null && calc < 200) {
+      const calciumCups = Math.round((200 - calc) / 40);
+      if (calciumCups > 0) {
+        suggestions.push({ chemical: "Calcium", cups: calciumCups, icon: GlassWater });
+        isBalanced = false;
+      }
+    }
+
+    return { suggestions, isBalanced };
   };
 
-  const handleWeeklyChange = (bungalowId: string, field: keyof WeeklyReadValues, value: string) => {
-    setWeeklyReads((prev) => ({
-      ...prev,
-      [bungalowId]: { ...prev[bungalowId], [field]: value },
-    }));
+  const handleOpenDialog = (bungalow: Bungalow) => {
+    setSelectedBungalow(bungalow);
+    setNewReadings({ alkalinity: "", calcium: "" });
+    setIsDialogOpen(true);
   };
 
-  const handleSaveDaily = async () => {
-    if (!userId) return;
-    const readsToInsert = Object.entries(dailyReads)
-      .filter(([_, values]) => Object.values(values).some(v => v))
-      .map(([poolId, values]) => ({
-        pool_id: poolId,
-        user_id: userId,
-        chlorine: values.chlorine ? parseFloat(values.chlorine) : null,
-        ph: values.ph ? parseFloat(values.ph) : null,
-        temperature: values.temperature ? parseFloat(values.temperature) : null,
-        flow: values.flow ? parseFloat(values.flow) : null,
-        work_order_temp: values.work_order_temp || null,
-        work_order_flow: values.work_order_flow || null,
-        // Note: 'acid' and 'chlorine_add' are not saved as there are no DB columns for them.
-      }));
+  const handleLogTreatment = async () => {
+    if (!selectedBungalow || !userId) return;
 
-    if (readsToInsert.length === 0) {
-      toast({ title: "No data to save", variant: "destructive" });
+    const alkalinity_reading = parseFloat(newReadings.alkalinity);
+    const calcium_reading = parseFloat(newReadings.calcium);
+
+    if (isNaN(alkalinity_reading) || isNaN(calcium_reading)) {
+      toast({ title: "Invalid input", description: "Please enter valid numbers for readings.", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("daily_reads").insert(readsToInsert);
+
+    const { suggestions } = calculateTreatment(alkalinity_reading, calcium_reading);
+    const alkalinity_treatment_cups = suggestions.find(s => s.chemical === 'Bicarb')?.cups || 0;
+    const calcium_treatment_cups = suggestions.find(s => s.chemical === 'Calcium')?.cups || 0;
+
+    const { error } = await supabase.from("treatments").insert({
+      bungalow_id: selectedBungalow.id,
+      user_id: userId,
+      treatment_date: new Date().toISOString(),
+      alkalinity_reading,
+      calcium_reading,
+      alkalinity_treatment_cups,
+      calcium_treatment_cups,
+    });
+
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error Logging Treatment", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Success", description: "All daily reads saved!" });
+      toast({ title: "Success!", description: `Treatment for ${selectedBungalow.name} logged.` });
+      setIsDialogOpen(false);
+      fetchBungalowsAndTreatments(); // Refresh data
     }
   };
-
-  const handleSaveWeekly = async () => {
-    if (!userId) return;
-    const weeklyToInsert = Object.entries(weeklyReads)
-      .filter(([_, values]) => Object.values(values).some(v => v))
-      .map(([poolId, values]) => ({
-        pool_id: poolId,
-        user_id: userId,
-        tds: values.tds ? parseFloat(values.tds) : null,
-        alkalinity: values.alkalinity ? parseFloat(values.alkalinity) : null,
-        calcium_hardness: values.calcium_hardness ? parseFloat(values.calcium_hardness) : null,
-        saturation_index: values.saturation_index ? parseFloat(values.saturation_index) : null,
-      }));
-
-    if (weeklyToInsert.length === 0) {
-      toast({ title: "No data to save", variant: "destructive" });
-      return;
-    }
-    const { error } = await supabase.from("weekly_reads").insert(weeklyToInsert);
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Success", description: "All weekly reads saved!" });
-    }
-  };
-
-  const handlePrint = () => window.print();
 
   if (loading) return <div className="flex min-h-screen items-center justify-center">Loading Bungalow data...</div>;
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex justify-between items-center print:hidden">
-          <Button variant="outline" onClick={() => navigate("/dashboard")}>← Back</Button>
-          <h1 className="text-2xl font-bold text-center">Polynesian Bungalows - All Units</h1>
-          <Button variant="outline" onClick={handlePrint}>Print</Button>
-        </div>
-        
-        <Card className="print:shadow-none print:border-none">
-          <CardContent className="p-4 md:p-6">
-            <Tabs defaultValue="daily" className="w-full">
-              <div className="flex justify-between items-start mb-4 print:hidden">
-                <TabsList className="grid w-full grid-cols-2 max-w-sm">
-                  <TabsTrigger value="daily">Daily Reads</TabsTrigger>
-                  <TabsTrigger value="weekly">TDS (Weekly Reads)</TabsTrigger>
-                </TabsList>
-                <TabsContent value="daily" className="m-0"><Button onClick={handleSaveDaily}>Save All Daily Reads</Button></TabsContent>
-                <TabsContent value="weekly" className="m-0"><Button onClick={handleSaveWeekly}>Save All Weekly Reads</Button></TabsContent>
+    <>
+      <div className="min-h-screen bg-background p-4">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex justify-between items-center print:hidden">
+            <Button variant="outline" onClick={() => navigate("/dashboard")}>← Back</Button>
+            <h1 className="text-2xl font-bold text-center">Polynesian Bungalows - All Units</h1>
+            <Button variant="outline" onClick={() => window.print()}>Print</Button>
+          </div>
+          
+          <Tabs defaultValue="water-balanced" className="w-full">
+            <TabsList className="grid w-full grid-cols-3 max-w-lg mx-auto print:hidden">
+              <TabsTrigger value="daily-reads" disabled>Daily Reads</TabsTrigger>
+              <TabsTrigger value="tds" disabled>TDS (Weekly Reads)</TabsTrigger>
+              <TabsTrigger value="water-balanced">Water Balanced</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="water-balanced" className="mt-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {bungalows.map((bungalow) => {
+                  const { suggestions, isBalanced } = calculateTreatment(
+                    bungalow.last_treatment?.alkalinity_reading ?? null,
+                    bungalow.last_treatment?.calcium_reading ?? null
+                  );
+                  return (
+                    <Card key={bungalow.id} className="print:break-inside-avoid">
+                      <CardHeader>
+                        <CardTitle>{bungalow.name}</CardTitle>
+                        <p className="text-sm text-muted-foreground">
+                          Last reading: {bungalow.last_treatment ? format(new Date(bungalow.last_treatment.treatment_date!), "M/d/yyyy") : "N/A"}
+                        </p>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex justify-around text-center">
+                          <div>
+                            <Label className="text-muted-foreground">Alkalinity</Label>
+                            <p className="text-2xl font-bold">{bungalow.last_treatment?.alkalinity_reading ?? "N/A"}</p>
+                          </div>
+                          <div>
+                            <Label className="text-muted-foreground">Calcium</Label>
+                            <p className="text-2xl font-bold">{bungalow.last_treatment?.calcium_reading ?? "N/A"}</p>
+                          </div>
+                        </div>
+                        <Card className="p-4 bg-secondary">
+                          <h4 className="font-semibold mb-2">Suggested Treatment</h4>
+                          {isBalanced ? (
+                            <div className="flex items-center gap-2 text-green-600">
+                              <CheckCircle className="h-5 w-5" />
+                              <p>Water is balanced. No treatment needed.</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {suggestions.map(({ chemical, cups, icon: Icon }) => (
+                                <div key={chemical} className="flex items-center gap-2">
+                                  <Icon className="h-5 w-5 text-primary" />
+                                  <p>Add <strong>{cups} {cups > 1 ? "cups" : "cup"}</strong> of {chemical}</p>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </Card>
+                        <Button className="w-full" onClick={() => handleOpenDialog(bungalow)}>Log Treatment</Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
-
-              <TabsContent value="daily" className="mt-6">
-                <div className="space-y-4">
-                  {bungalows.map((bungalow) => {
-                    const values = dailyReads[bungalow.id] || {};
-                    return (
-                      <Card key={bungalow.id} className="print:break-inside-avoid">
-                        <CardHeader className="py-3">
-                          <div className="flex items-center gap-4">
-                            <CardTitle className="text-base">{bungalow.name}</CardTitle>
-                            <div className="flex items-center gap-2">
-                              <Checkbox id={`${bungalow.id}-acid`} checked={values.acid} onCheckedChange={c => handleDailyChange(bungalow.id, 'acid', !!c)} />
-                              <Label htmlFor={`${bungalow.id}-acid`}>ACID</Label>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Checkbox id={`${bungalow.id}-chlorine_add`} checked={values.chlorine_add} onCheckedChange={c => handleDailyChange(bungalow.id, 'chlorine_add', !!c)} />
-                              <Label htmlFor={`${bungalow.id}-chlorine_add`}>CHLORINE</Label>
-                            </div>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="py-3">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="space-y-1"><Label>Chlorine</Label><Input type="number" step="0.1" value={values.chlorine || ""} onChange={e => handleDailyChange(bungalow.id, 'chlorine', e.target.value)} /></div>
-                            <div className="space-y-1"><Label>pH</Label><Input type="number" step="0.1" value={values.ph || ""} onChange={e => handleDailyChange(bungalow.id, 'ph', e.target.value)} /></div>
-                            <div className="space-y-1">
-                              <Label>Temperature</Label>
-                              <Input type="number" step="0.1" value={values.temperature || ""} onChange={e => handleDailyChange(bungalow.id, 'temperature', e.target.value)} />
-                              <Label className="text-xs text-muted-foreground">W.O#</Label>
-                              <Input placeholder="Work Order" value={values.work_order_temp || ""} onChange={e => handleDailyChange(bungalow.id, 'work_order_temp', e.target.value)} />
-                            </div>
-                            <div className="space-y-1">
-                              <Label>Flow</Label>
-                              <Input type="number" step="0.1" value={values.flow || ""} onChange={e => handleDailyChange(bungalow.id, 'flow', e.target.value)} />
-                              <Label className="text-xs text-muted-foreground">W.O#</Label>
-                              <Input placeholder="Work Order" value={values.work_order_flow || ""} onChange={e => handleDailyChange(bungalow.id, 'work_order_flow', e.target.value)} />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </TabsContent>
-
-              <TabsContent value="weekly" className="mt-6">
-                <div className="space-y-4">
-                  {bungalows.map((bungalow) => {
-                    const values = weeklyReads[bungalow.id] || {};
-                    return (
-                      <Card key={bungalow.id} className="print:break-inside-avoid">
-                        <CardHeader className="py-3">
-                          <CardTitle className="text-base">{bungalow.name}</CardTitle>
-                        </CardHeader>
-                        <CardContent className="py-3">
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div className="space-y-1"><Label>TDS</Label><Input type="number" step="1" value={values.tds || ""} onChange={e => handleWeeklyChange(bungalow.id, 'tds', e.target.value)} /></div>
-                            <div className="space-y-1"><Label>Alkalinity</Label><Input type="number" step="1" value={values.alkalinity || ""} onChange={e => handleWeeklyChange(bungalow.id, 'alkalinity', e.target.value)} /></div>
-                            <div className="space-y-1"><Label>Calcium Hardness</Label><Input type="number" step="1" value={values.calcium_hardness || ""} onChange={e => handleWeeklyChange(bungalow.id, 'calcium_hardness', e.target.value)} /></div>
-                            <div className="space-y-1"><Label>Saturation Index</Label><Input type="number" step="0.1" value={values.saturation_index || ""} onChange={e => handleWeeklyChange(bungalow.id, 'saturation_index', e.target.value)} /></div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
       </div>
-    </div>
+
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Log New Treatment for {selectedBungalow?.name}</DialogTitle>
+            <DialogDescription>Enter the new readings below. The suggested treatment will be calculated and saved.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="alkalinity">Alkalinity Reading</Label>
+              <Input id="alkalinity" type="number" value={newReadings.alkalinity} onChange={(e) => setNewReadings({...newReadings, alkalinity: e.target.value})} placeholder="e.g., 40" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="calcium">Calcium Reading</Label>
+              <Input id="calcium" type="number" value={newReadings.calcium} onChange={(e) => setNewReadings({...newReadings, calcium: e.target.value})} placeholder="e.g., 120" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleLogTreatment}>Save Treatment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
