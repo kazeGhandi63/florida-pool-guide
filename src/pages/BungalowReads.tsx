@@ -32,10 +32,13 @@ type WeeklyReadValues = {
   calcium_treatment_cups?: string;
 };
 
+// Add bungalow_id to the state to link pools with the treatments table
+type Bungalow = { id: string; name: string; bungalow_id: string };
+
 const BungalowReads = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [bungalows, setBungalows] = useState<{ id: string; name: string }[]>([]);
+  const [bungalows, setBungalows] = useState<Bungalow[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [dailyReads, setDailyReads] = useState<Record<string, DailyReadValues>>({});
@@ -58,6 +61,7 @@ const BungalowReads = () => {
   const fetchBungalowData = async (currentUserId: string) => {
     setLoading(true);
 
+    // 1. Fetch pools that are bungalows
     const { data: pools, error: poolsError } = await supabase
       .from("pools")
       .select("id, name, resorts!inner(name)")
@@ -74,6 +78,7 @@ const BungalowReads = () => {
       return;
     }
 
+    // 2. Ensure a corresponding entry exists in the 'bungalows' table for each pool
     const { data: existingBungalows, error: bungalowsError } = await supabase.from("bungalows").select("id, name");
     if (bungalowsError) {
       toast({ title: "Error fetching bungalows", description: bungalowsError.message, variant: "destructive" });
@@ -93,13 +98,30 @@ const BungalowReads = () => {
       }
     }
 
-    pools.sort((a, b) => {
+    // 3. Refetch all bungalows to get their specific IDs from the 'bungalows' table
+    const { data: allBungalows, error: allBungalowsError } = await supabase.from("bungalows").select("id, name");
+    if (allBungalowsError) {
+      toast({ title: "Error fetching bungalow IDs", description: allBungalowsError.message, variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    // 4. Map pool IDs to bungalow IDs using the name as the key
+    const bungalowIdMap = new Map(allBungalows.map(b => [b.name, b.id]));
+    const enrichedBungalows = pools
+      .map(pool => ({
+        ...pool,
+        bungalow_id: bungalowIdMap.get(pool.name) || "",
+      }))
+      .filter(b => b.bungalow_id); // Ensure we have a valid bungalow_id
+
+    enrichedBungalows.sort((a, b) => {
       const numA = parseInt(a.name.match(/\d+/)?.[0] || "0");
       const numB = parseInt(b.name.match(/\d+/)?.[0] || "0");
       return numA - numB;
     });
 
-    setBungalows(pools);
+    setBungalows(enrichedBungalows);
     setLoading(false);
   };
 
@@ -173,22 +195,64 @@ const BungalowReads = () => {
 
   const handleSaveWeekly = async () => {
     if (!userId) return;
-    const readsToInsert = Object.entries(weeklyReads)
-      .filter(([, values]) => Object.values(values).some(v => v))
-      .map(([poolId, values]) => ({
+
+    const weeklyReadsToInsert = [];
+    const treatmentsToInsert = [];
+
+    for (const [poolId, values] of Object.entries(weeklyReads)) {
+      if (!Object.values(values).some(v => v)) continue;
+
+      const bungalow = bungalows.find(b => b.id === poolId);
+      if (!bungalow) continue;
+
+      // Prepare data for 'weekly_reads' table
+      weeklyReadsToInsert.push({
         pool_id: poolId,
         user_id: userId,
-        ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === '' ? null : value]))
-      }));
-    if (readsToInsert.length === 0) {
+        tds: values.tds ? parseFloat(values.tds) : null,
+        alkalinity: values.alkalinity ? parseFloat(values.alkalinity) : null,
+        calcium_hardness: values.calcium_hardness ? parseFloat(values.calcium_hardness) : null,
+        saturation_index: values.saturation_index ? parseFloat(values.saturation_index) : null,
+      });
+
+      // Prepare data for 'treatments' table
+      if (values.alkalinity_treatment_cups || values.calcium_treatment_cups) {
+        treatmentsToInsert.push({
+          bungalow_id: bungalow.bungalow_id, // Use the correct ID from the 'bungalows' table
+          user_id: userId,
+          alkalinity_reading: values.alkalinity ? parseFloat(values.alkalinity) : null,
+          calcium_reading: values.calcium_hardness ? parseFloat(values.calcium_hardness) : null,
+          alkalinity_treatment_cups: values.alkalinity_treatment_cups ? parseFloat(values.alkalinity_treatment_cups) : null,
+          calcium_treatment_cups: values.calcium_treatment_cups ? parseFloat(values.calcium_treatment_cups) : null,
+        });
+      }
+    }
+
+    if (weeklyReadsToInsert.length === 0 && treatmentsToInsert.length === 0) {
       toast({ title: "No data to save", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("weekly_reads").insert(readsToInsert);
-    if (error) {
-      toast({ title: "Error saving weekly reads", description: error.message, variant: "destructive" });
-    } else {
-      toast({ title: "Success!", description: "Weekly reads have been saved." });
+
+    let hasError = false;
+
+    if (weeklyReadsToInsert.length > 0) {
+      const { error } = await supabase.from("weekly_reads").insert(weeklyReadsToInsert);
+      if (error) {
+        toast({ title: "Error saving weekly reads", description: error.message, variant: "destructive" });
+        hasError = true;
+      }
+    }
+
+    if (treatmentsToInsert.length > 0) {
+      const { error } = await supabase.from("treatments").insert(treatmentsToInsert);
+      if (error) {
+        toast({ title: "Error saving treatments", description: error.message, variant: "destructive" });
+        hasError = true;
+      }
+    }
+
+    if (!hasError) {
+      toast({ title: "Success!", description: "Weekly data has been saved." });
       setWeeklyReads({});
     }
   };
