@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
+import { calculateLSI } from "@/lib/lsi";
 
 type DailyReadValues = {
   chlorine?: string;
@@ -104,7 +105,32 @@ const BungalowReads = () => {
   };
 
   const handleWeeklyChange = (poolId: string, field: keyof WeeklyReadValues, value: string) => {
-    setWeeklyReads(prev => ({ ...prev, [poolId]: { ...prev[poolId], [field]: value } }));
+    setWeeklyReads(prev => {
+      const newWeeklyReads = JSON.parse(JSON.stringify(prev)); // Deep copy
+      if (!newWeeklyReads[poolId]) {
+        newWeeklyReads[poolId] = {};
+      }
+      newWeeklyReads[poolId][field] = value;
+
+      // Automatically calculate LSI
+      const currentDaily = dailyReads[poolId] || {};
+      const currentWeekly = newWeeklyReads[poolId];
+
+      const ph = currentDaily.ph ? parseFloat(currentDaily.ph) : null;
+      const temp = currentDaily.temperature ? parseFloat(currentDaily.temperature) : null;
+      const alk = currentWeekly.alkalinity ? parseFloat(currentWeekly.alkalinity) : null;
+      const ch = currentWeekly.calcium_hardness ? parseFloat(currentWeekly.calcium_hardness) : null;
+
+      const lsi = calculateLSI(ph, temp, ch, alk);
+      
+      if (lsi !== null) {
+        newWeeklyReads[poolId].saturation_index = lsi.toString();
+      } else {
+        delete newWeeklyReads[poolId].saturation_index;
+      }
+
+      return newWeeklyReads;
+    });
   };
 
   const handleSaveDaily = async () => {
@@ -220,7 +246,16 @@ const BungalowReads = () => {
                       <div className="space-y-1"><Label>TDS</Label><Input type="number" step="0.1" value={values.tds || ""} onChange={e => handleWeeklyChange(bungalow.id, 'tds', e.target.value)} /></div>
                       <div className="space-y-1"><Label>Alkalinity</Label><Input type="number" step="0.1" value={values.alkalinity || ""} onChange={e => handleWeeklyChange(bungalow.id, 'alkalinity', e.target.value)} /></div>
                       <div className="space-y-1"><Label>Calcium Hardness</Label><Input type="number" step="0.1" value={values.calcium_hardness || ""} onChange={e => handleWeeklyChange(bungalow.id, 'calcium_hardness', e.target.value)} /></div>
-                      <div className="space-y-1"><Label>Saturation Index</Label><Input type="number" step="0.1" value={values.saturation_index || ""} onChange={e => handleWeeklyChange(bungalow.id, 'saturation_index', e.target.value)} /></div>
+                      <div className="space-y-1">
+                        <Label>Saturation Index</Label>
+                        <Input 
+                          type="number" 
+                          value={values.saturation_index || ""} 
+                          readOnly 
+                          placeholder="Auto-calculated"
+                          className="bg-muted cursor-not-allowed"
+                        />
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
