@@ -103,42 +103,48 @@ const BungalowReads = () => {
     setLoading(false);
   };
 
+  const recalculateDependentValues = (dailyValues: DailyReadValues, weeklyValues: WeeklyReadValues): Partial<WeeklyReadValues> => {
+    const newWeekly: Partial<WeeklyReadValues> = {};
+
+    const ph = dailyValues.ph ? parseFloat(dailyValues.ph) : null;
+    const temp = dailyValues.temperature ? parseFloat(dailyValues.temperature) : null;
+    const alk = weeklyValues.alkalinity ? parseFloat(weeklyValues.alkalinity) : null;
+    const ch = weeklyValues.calcium_hardness ? parseFloat(weeklyValues.calcium_hardness) : null;
+
+    const lsi = calculateLSI(ph, temp, ch, alk);
+    newWeekly.saturation_index = lsi !== null ? lsi.toString() : "";
+
+    const alkTreatment = calculateAlkalinityTreatment(alk);
+    newWeekly.alkalinity_treatment_cups = alkTreatment > 0 ? alkTreatment.toString() : "";
+
+    const calciumTreatment = calculateCalciumTreatment(ch);
+    newWeekly.calcium_treatment_cups = calciumTreatment > 0 ? calciumTreatment.toString() : "";
+
+    return newWeekly;
+  };
+
   const handleDailyChange = (poolId: string, field: keyof DailyReadValues, value: string | boolean) => {
-    setDailyReads(prev => ({ ...prev, [poolId]: { ...prev[poolId], [field]: value } }));
+    setDailyReads(prevDaily => {
+      const newDailyReads = { ...prevDaily, [poolId]: { ...(prevDaily[poolId] || {}), [field]: value } };
+
+      if (field === 'ph' || field === 'temperature') {
+        setWeeklyReads(prevWeekly => {
+          const currentWeekly = prevWeekly[poolId] || {};
+          const updatedValues = recalculateDependentValues(newDailyReads[poolId], currentWeekly);
+          return { ...prevWeekly, [poolId]: { ...currentWeekly, ...updatedValues } };
+        });
+      }
+      
+      return newDailyReads;
+    });
   };
 
   const handleWeeklyChange = (poolId: string, field: keyof WeeklyReadValues, value: string) => {
-    setWeeklyReads(prev => {
-      const newWeeklyReads = JSON.parse(JSON.stringify(prev)); // Deep copy
-      if (!newWeeklyReads[poolId]) {
-        newWeeklyReads[poolId] = {};
-      }
-      newWeeklyReads[poolId][field] = value;
-
+    setWeeklyReads(prevWeekly => {
+      const newWeeklyReads = { ...prevWeekly, [poolId]: { ...(prevWeekly[poolId] || {}), [field]: value } };
       const currentDaily = dailyReads[poolId] || {};
-      const currentWeekly = newWeeklyReads[poolId];
-
-      // LSI Calculation
-      const ph = currentDaily.ph ? parseFloat(currentDaily.ph) : null;
-      const temp = currentDaily.temperature ? parseFloat(currentDaily.temperature) : null;
-      const alk = currentWeekly.alkalinity ? parseFloat(currentWeekly.alkalinity) : null;
-      const ch = currentWeekly.calcium_hardness ? parseFloat(currentWeekly.calcium_hardness) : null;
-
-      const lsi = calculateLSI(ph, temp, ch, alk);
-      if (lsi !== null) {
-        newWeeklyReads[poolId].saturation_index = lsi.toString();
-      } else {
-        delete newWeeklyReads[poolId].saturation_index;
-      }
-
-      // Treatment Calculation
-      const alkTreatment = calculateAlkalinityTreatment(alk);
-      newWeeklyReads[poolId].alkalinity_treatment_cups = alkTreatment.toString();
-
-      const calciumTreatment = calculateCalciumTreatment(ch);
-      newWeeklyReads[poolId].calcium_treatment_cups = calciumTreatment.toString();
-
-      return newWeeklyReads;
+      const updatedValues = recalculateDependentValues(currentDaily, newWeeklyReads[poolId]);
+      return { ...prevWeekly, [poolId]: { ...newWeeklyReads[poolId], ...updatedValues } };
     });
   };
 
