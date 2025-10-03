@@ -263,8 +263,8 @@ const BungalowReads = () => {
     const treatmentData: any = {
       bungalow_id: poolId,
       user_id: userId,
-      bicarb_cups_added: suggestion.bicarb,
-      calcium_cups_added: suggestion.calcium,
+      bicarb: suggestion.bicarb,
+      calcium: suggestion.calcium,
     };
 
     const { error } = await supabase.from("treatments").insert(treatmentData);
@@ -379,7 +379,8 @@ const BungalowReads = () => {
                     const suggestion = treatmentSuggestions[bungalow.id];
                     return (
                       <Card key={bungalow.id}>
-                        <CardHeader><CardTitle>{bungalow.name}</CardTitle>
+                        <CardHeader>
+                          <CardTitle>{bungalow.name}</CardTitle>
                           <CardDescription>
                             Last reading: {latestRead && latestRead.read_date ? format(parseISO(latestRead.read_date), "M/d/yyyy") : "N/A"}
                           </CardDescription>
