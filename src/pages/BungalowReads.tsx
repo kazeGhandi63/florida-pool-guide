@@ -33,46 +33,82 @@ const BungalowReads = () => {
 
   useEffect(() => {
     const init = async () => {
-      await fetchUser();
-      await fetchBungalowData();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+        await fetchBungalowData(user.id);
+      } else {
+        toast({ title: "Error", description: "You must be logged in.", variant: "destructive" });
+        setLoading(false);
+      }
     };
     init();
   }, []);
 
-  const fetchUser = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) setUserId(user.id);
-  };
-
-  const fetchBungalowData = async () => {
+  const fetchBungalowData = async (currentUserId: string) => {
     setLoading(true);
 
-    const [poolsRes, bungalowsRes, treatmentsRes] = await Promise.all([
-      supabase
-        .from("pools")
-        .select("id, name, resorts!inner(name)")
-        .eq("resorts.name", "Polynesian Bungalows"),
+    // 1. Get pools for the resort
+    const { data: pools, error: poolsError } = await supabase
+      .from("pools")
+      .select("id, name, resorts!inner(name)")
+      .eq("resorts.name", "Polynesian Bungalows");
+
+    if (poolsError) {
+      toast({ title: "Error fetching pools", description: poolsError.message, variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+    if (!pools || pools.length === 0) {
+      toast({ title: "Info", description: "No bungalows found for Polynesian Resort in the 'pools' table." });
+      setLoading(false);
+      return;
+    }
+
+    // 2. Get existing bungalows to check for missing ones
+    const { data: existingBungalows, error: bungalowsError } = await supabase.from("bungalows").select("id, name");
+    if (bungalowsError) {
+      toast({ title: "Error fetching bungalows", description: bungalowsError.message, variant: "destructive" });
+      setLoading(false);
+      return;
+    }
+
+    // 3. Create any bungalows that are in the pools table but not the bungalows table
+    const existingBungalowNames = new Set(existingBungalows.map(b => b.name));
+    const bungalowsToCreate = pools
+      .filter(p => !existingBungalowNames.has(p.name))
+      .map(p => ({ name: p.name, user_id: currentUserId }));
+
+    if (bungalowsToCreate.length > 0) {
+      const { error: insertError } = await supabase.from("bungalows").insert(bungalowsToCreate);
+      if (insertError) {
+        toast({ title: "Error setting up bungalows", description: insertError.message, variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+    }
+
+    // 4. Now that all bungalows are guaranteed to exist, fetch them and the treatments
+    const [bungalowsRes, treatmentsRes] = await Promise.all([
       supabase.from("bungalows").select("id, name"),
       supabase.from("treatments").select("*").order("treatment_date", { ascending: false }),
     ]);
 
-    if (poolsRes.error || bungalowsRes.error || treatmentsRes.error) {
+    if (bungalowsRes.error || treatmentsRes.error) {
       toast({ title: "Error fetching data", description: "Could not load all necessary bungalow data.", variant: "destructive" });
       setLoading(false);
       return;
     }
 
-    const pools = poolsRes.data || [];
-    const bungalows = bungalowsRes.data || [];
-    const treatments = treatmentsRes.data || [];
+    const allBungalows = bungalowsRes.data || [];
+    const allTreatments = treatmentsRes.data || [];
+    const bungalowMap = new Map(allBungalows.map(b => [b.name, b.id]));
 
-    const bungalowMap = new Map(bungalows.map(b => [b.name, b.id]));
-
+    // 5. Combine all data for display
     const combinedData: DisplayBungalow[] = pools
       .map(pool => {
         const bungalowId = bungalowMap.get(pool.name);
-        const lastTreatment = bungalowId ? treatments.find(t => t.bungalow_id === bungalowId) || null : null;
-
+        const lastTreatment = bungalowId ? allTreatments.find(t => t.bungalow_id === bungalowId) || null : null;
         return {
           poolId: pool.id,
           bungalowId: bungalowId || '',
@@ -80,7 +116,7 @@ const BungalowReads = () => {
           lastTreatment: lastTreatment,
         };
       })
-      .filter(b => b.bungalowId);
+      .filter(b => b.bungalowId); // Safeguard to ensure we only show linked bungalows
 
     combinedData.sort((a, b) => {
       const numA = parseInt(a.name.match(/\d+/)?.[0] || "0");
@@ -157,7 +193,7 @@ const BungalowReads = () => {
     } else {
       toast({ title: "Success!", description: `Treatment for ${selectedBungalow.name} logged.` });
       setIsDialogOpen(false);
-      fetchBungalowData();
+      if (userId) fetchBungalowData(userId);
     }
   };
 
