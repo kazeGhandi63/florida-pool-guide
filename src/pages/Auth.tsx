@@ -11,8 +11,6 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [poolAttendant, setPoolAttendant] = useState("");
   const [attendantId, setAttendantId] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -21,18 +19,24 @@ const Auth = () => {
     e.preventDefault();
     setLoading(true);
 
+    // We'll generate a unique, hidden email from the attendant ID.
+    // The attendant ID will also serve as the password.
+    const email = `${attendantId}@pool-guide.local`;
+    const password = attendantId;
+
     try {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
-          email: email,
+          email,
           password,
         });
 
         if (error) throw error;
         navigate("/dashboard");
       } else {
+        // Sign up
         const { error } = await supabase.auth.signUp({
-          email: email,
+          email,
           password,
           options: {
             data: {
@@ -45,7 +49,7 @@ const Auth = () => {
         if (error) throw error;
         toast({
           title: "Account created!",
-          description: "Please check your email to confirm your account, then you can log in.",
+          description: "You can now sign in with your name and ID.",
         });
         setIsLogin(true);
       }
@@ -66,78 +70,33 @@ const Auth = () => {
         <CardHeader>
           <CardTitle>Pool Reads</CardTitle>
           <CardDescription>
-            {isLogin ? "Sign in to your account" : "Create a new account"}
+            {isLogin ? "Sign in with your Attendant Name and ID" : "Create a new account"}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
-            {isLogin ? (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Pool Attendant</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="Enter your email address"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">PA ID</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="poolAttendant">Pool Attendant Name</Label>
-                  <Input
-                    id="poolAttendant"
-                    value={poolAttendant}
-                    onChange={(e) => setPoolAttendant(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="attendantId">Attendant ID</Label>
-                  <Input
-                    id="attendantId"
-                    value={attendantId}
-                    onChange={(e) => setAttendantId(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
-              </>
-            )}
+            <div className="space-y-2">
+              <Label htmlFor="poolAttendant">Pool Attendant Name</Label>
+              <Input
+                id="poolAttendant"
+                placeholder="Enter your full name"
+                value={poolAttendant}
+                onChange={(e) => setPoolAttendant(e.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="attendantId">Attendant ID</Label>
+              <Input
+                id="attendantId"
+                type="password" // Use password type to hide the ID
+                placeholder="Enter your Attendant ID"
+                value={attendantId}
+                onChange={(e) => setAttendantId(e.target.value)}
+                required
+              />
+            </div>
+            
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
             </Button>
