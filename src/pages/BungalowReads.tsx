@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { calculateLSI } from "@/lib/lsi";
+import { calculateAlkalinityTreatment, calculateCalciumTreatment } from "@/lib/treatments";
 
 type DailyReadValues = {
   chlorine?: string;
@@ -27,6 +28,8 @@ type WeeklyReadValues = {
   alkalinity?: string;
   calcium_hardness?: string;
   saturation_index?: string;
+  alkalinity_treatment_cups?: string;
+  calcium_treatment_cups?: string;
 };
 
 const BungalowReads = () => {
@@ -112,22 +115,28 @@ const BungalowReads = () => {
       }
       newWeeklyReads[poolId][field] = value;
 
-      // Automatically calculate LSI
       const currentDaily = dailyReads[poolId] || {};
       const currentWeekly = newWeeklyReads[poolId];
 
+      // LSI Calculation
       const ph = currentDaily.ph ? parseFloat(currentDaily.ph) : null;
       const temp = currentDaily.temperature ? parseFloat(currentDaily.temperature) : null;
       const alk = currentWeekly.alkalinity ? parseFloat(currentWeekly.alkalinity) : null;
       const ch = currentWeekly.calcium_hardness ? parseFloat(currentWeekly.calcium_hardness) : null;
 
       const lsi = calculateLSI(ph, temp, ch, alk);
-      
       if (lsi !== null) {
         newWeeklyReads[poolId].saturation_index = lsi.toString();
       } else {
         delete newWeeklyReads[poolId].saturation_index;
       }
+
+      // Treatment Calculation
+      const alkTreatment = calculateAlkalinityTreatment(alk);
+      newWeeklyReads[poolId].alkalinity_treatment_cups = alkTreatment.toString();
+
+      const calciumTreatment = calculateCalciumTreatment(ch);
+      newWeeklyReads[poolId].calcium_treatment_cups = calciumTreatment.toString();
 
       return newWeeklyReads;
     });
@@ -251,7 +260,8 @@ const BungalowReads = () => {
                 <Card key={bungalow.id} className="print:break-inside-avoid">
                   <CardContent className="p-6">
                     <h3 className="font-bold text-lg mb-4">{bungalow.name}</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-start">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-x-4 gap-y-4 items-start">
+                      {/* Row 1 */}
                       <div className="space-y-1"><Label>TDS</Label><Input type="number" step="0.1" value={values.tds || ""} onChange={e => handleWeeklyChange(bungalow.id, 'tds', e.target.value)} /></div>
                       <div className="space-y-1"><Label>Alkalinity</Label><Input type="number" step="0.1" value={values.alkalinity || ""} onChange={e => handleWeeklyChange(bungalow.id, 'alkalinity', e.target.value)} /></div>
                       <div className="space-y-1"><Label>Calcium Hardness</Label><Input type="number" step="0.1" value={values.calcium_hardness || ""} onChange={e => handleWeeklyChange(bungalow.id, 'calcium_hardness', e.target.value)} /></div>
@@ -264,8 +274,33 @@ const BungalowReads = () => {
                           placeholder="Auto-calculated"
                           className="bg-muted cursor-not-allowed"
                         />
+                      </div>
+
+                      {/* Row 2 */}
+                      <div className="hidden md:block"></div> {/* Spacer */}
+                      <div className="space-y-1">
+                        <Label>Alkalinity Treatment (cups)</Label>
+                        <Input 
+                          type="number" 
+                          value={values.alkalinity_treatment_cups || ""} 
+                          readOnly 
+                          placeholder="Auto-calculated"
+                          className="bg-muted cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Calcium Treatment (cups)</Label>
+                        <Input 
+                          type="number" 
+                          value={values.calcium_treatment_cups || ""} 
+                          readOnly 
+                          placeholder="Auto-calculated"
+                          className="bg-muted cursor-not-allowed"
+                        />
+                      </div>
+                      <div className="space-y-1 h-full flex items-end pb-1">
                         {lsiValue !== null && (
-                          <p className={`text-sm pt-1 ${lsiStatus.className}`}>
+                          <p className={`text-sm ${lsiStatus.className}`}>
                             {lsiStatus.text}
                           </p>
                         )}
