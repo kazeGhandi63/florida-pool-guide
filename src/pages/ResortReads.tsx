@@ -2,44 +2,44 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tables } from "@/integrations/supabase/types";
-import { format, parseISO, getDay, setDay } from "date-fns";
 import { Skeleton } from "@/components/ui/skeleton";
 
-type Pool = {
-  id: string;
-  name: string;
-  pool_type: string;
+type Pool = Tables<"pools">;
+type Resort = Tables<"resorts">;
+
+type DailyReadValues = {
+  chlorine?: string;
+  ph?: string;
+  bromine?: string;
+  temperature?: string;
+  flow?: string;
+  influent?: string;
+  effluent?: string;
+  scrubbed?: boolean;
+  vacuumed?: boolean;
+  drain_fill?: boolean;
+  tiles?: boolean;
+  decoin?: boolean;
+  backwash?: boolean;
+  work_order_1?: string;
+  work_order_2?: string;
+  work_order_3?: string;
+  work_order_4?: string;
 };
 
-type Resort = {
-  name: string;
+type WeeklyReadValues = {
+  tds?: string;
+  alkalinity?: string;
+  calcium_hardness?: string;
+  saturation_index?: string;
 };
-
-type PoolReads = {
-  chlorine: string;
-  ph: string;
-  temperature: string;
-  flow: string;
-  influent: string;
-  effluent: string;
-};
-
-type WeeklyReads = {
-  tds: string;
-  alkalinity: string;
-  calciumHardness: string;
-  lsi: number | null;
-};
-
-type LatestWeeklyRead = Tables<"weekly_reads">;
-
-const weekdays = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
 const ResortReads = () => {
   const { resortId } = useParams();
@@ -48,60 +48,18 @@ const ResortReads = () => {
   const [resort, setResort] = useState<Resort | null>(null);
   const [pools, setPools] = useState<Pool[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
-  const [reads, setReads] = useState<Record<string, PoolReads>>({});
-  const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReads>>({});
-  const [latestWeeklyReads, setLatestWeeklyReads] = useState<Record<string, LatestWeeklyRead>>({});
+  const [dailyReads, setDailyReads] = useState<Record<string, DailyReadValues>>({});
+  const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReadValues>>({});
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>(() => weekdays[getDay(new Date())]);
 
   useEffect(() => {
     fetchUser();
     fetchResortAndPools();
   }, [resortId]);
 
-  useEffect(() => {
-    if (!loading && pools.length > 0 && activeTab !== "weekly") {
-      fetchReadsForDay(activeTab, pools);
-    }
-  }, [activeTab, loading, pools]);
-
   const fetchUser = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (user) setUserId(user.id);
-  };
-
-  const fetchReadsForDay = async (day: string, currentPools: Pool[]) => {
-    const poolIds = currentPools.map(p => p.id);
-    if (poolIds.length === 0) return;
-
-    const dayIndex = weekdays.indexOf(day);
-    const targetDate = setDay(new Date(), dayIndex);
-    const formattedDate = format(targetDate, "yyyy-MM-dd");
-
-    const { data: dailyData, error } = await supabase
-      .from("daily_reads")
-      .select("*")
-      .in("pool_id", poolIds)
-      .eq("read_date", formattedDate);
-
-    if (error) {
-      toast({ title: `Error fetching reads for ${day}`, description: error.message, variant: "destructive" });
-      return;
-    }
-
-    const newReads: Record<string, PoolReads> = {};
-    currentPools.forEach(pool => {
-      const existingRead = dailyData?.find(r => r.pool_id === pool.id);
-      newReads[pool.id] = {
-        chlorine: existingRead?.chlorine?.toString() ?? "",
-        ph: existingRead?.ph?.toString() ?? "",
-        temperature: existingRead?.temperature?.toString() ?? "",
-        flow: existingRead?.flow?.toString() ?? "",
-        influent: existingRead?.influent?.toString() ?? "",
-        effluent: existingRead?.effluent?.toString() ?? "",
-      };
-    });
-    setReads(newReads);
   };
 
   const fetchResortAndPools = async () => {
@@ -114,229 +72,155 @@ const ResortReads = () => {
     }
     setResort(resortData);
 
-    const { data: poolsData, error: poolsError } = await supabase.from("pools").select("*").eq("resort_id", resortId).order("name");
+    const { data: poolsData, error: poolsError } = await supabase.from("pools").select("*").eq("resort_id", resortId);
     if (poolsError) {
       toast({ title: "Error fetching pools", description: poolsError.message, variant: "destructive" });
     } else {
       let sortedPools = poolsData || [];
-      if (resortData.name === "Grand Floridian") {
+      if (resortData.name === "Grand Floridian Resort AM") {
         const order = ["Court Yard Pool", "Court Yard Spa", "Beach Pool", "APA", "Men Spa", "Women Spa"];
-        sortedPools = sortedPools.sort((a, b) => {
-          const indexA = order.indexOf(a.name);
-          const indexB = order.indexOf(b.name);
-          return (indexA === -1 ? Infinity : indexA) - (indexB === -1 ? Infinity : indexB);
-        });
+        sortedPools.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+      } else if (resortData.name === "Grand Floridian Resort PM") {
+        const order = ["Court Yard Pool", "Court Yard Spa", "Court Yard Fountain", "Beach Pool", "APA", "Founder's Fountain", "Pinguin's Fountain", "Men Spa", "Women Spa"];
+        sortedPools.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
+      } else {
+        sortedPools.sort((a, b) => a.name.localeCompare(b.name));
       }
       setPools(sortedPools);
-
-      const initialReads: Record<string, PoolReads> = {};
-      const initialWeeklyReads: Record<string, WeeklyReads> = {};
-      sortedPools.forEach(pool => {
-        initialReads[pool.id] = { chlorine: "", ph: "", temperature: "", flow: "", influent: "", effluent: "" };
-        initialWeeklyReads[pool.id] = { tds: "", alkalinity: "", calciumHardness: "", lsi: null };
-      });
-      setReads(initialReads);
-      setWeeklyReads(initialWeeklyReads);
-
-      if (sortedPools.length > 0) {
-        await fetchLatestWeeklyReads(sortedPools);
-      }
     }
     setLoading(false);
   };
 
-  const fetchLatestWeeklyReads = async (currentPools: Pool[]) => {
-    if (currentPools.length === 0) return;
-    const poolIds = currentPools.map(p => p.id);
-
-    const { data: weeklyData } = await supabase.from("weekly_reads").select("*").in("pool_id", poolIds).order("read_date", { ascending: false });
-    const latestWeeklyByPool: Record<string, LatestWeeklyRead> = {};
-    for (const read of weeklyData || []) {
-      if (read.pool_id && !latestWeeklyByPool[read.pool_id]) latestWeeklyByPool[read.pool_id] = read;
-    }
-    setLatestWeeklyReads(latestWeeklyByPool);
-
-    setWeeklyReads(prev => {
-      const newWeeklyReads = { ...prev };
-      currentPools.forEach((pool) => {
-        const lastWeekly = latestWeeklyByPool[pool.id];
-        newWeeklyReads[pool.id] = {
-          tds: lastWeekly?.tds != null ? lastWeekly.tds.toString() : "",
-          alkalinity: lastWeekly?.alkalinity != null ? lastWeekly.alkalinity.toString() : "",
-          calciumHardness: lastWeekly?.calcium_hardness != null ? lastWeekly.calcium_hardness.toString() : "",
-          lsi: lastWeekly?.saturation_index ?? null,
-        };
-      });
-      return newWeeklyReads;
-    });
+  const handleDailyChange = (poolId: string, field: keyof DailyReadValues, value: string | boolean) => {
+    setDailyReads(prev => ({ ...prev, [poolId]: { ...prev[poolId], [field]: value } }));
   };
 
-  const handleInputChange = (poolId: string, field: keyof PoolReads, value: string) => {
-    setReads((prev) => ({ ...prev, [poolId]: { ...prev[poolId], [field]: value } }));
+  const handleWeeklyChange = (poolId: string, field: keyof WeeklyReadValues, value: string) => {
+    setWeeklyReads(prev => ({ ...prev, [poolId]: { ...prev[poolId], [field]: value } }));
   };
 
-  const handleWeeklyInputChange = (poolId: string, field: keyof WeeklyReads, value: string) => {
-    setWeeklyReads((prev) => {
-      const updated = { ...prev, [poolId]: { ...prev[poolId], [field]: value } };
-      const poolData = updated[poolId];
-      const dailyData = reads[poolId];
-      if (poolData.tds && poolData.alkalinity && poolData.calciumHardness && dailyData?.ph && dailyData?.temperature) {
-        const phValue = parseFloat(dailyData.ph);
-        const tempFahrenheit = parseFloat(dailyData.temperature);
-        const alkValue = parseFloat(poolData.alkalinity);
-        const caValue = parseFloat(poolData.calciumHardness);
-        const tdsValue = parseFloat(poolData.tds);
-        const tempCelsius = (tempFahrenheit - 32) * 5 / 9;
-        const A = (Math.log10(tdsValue) - 1) / 10;
-        const B = -13.12 * Math.log10(tempCelsius + 273) + 34.55;
-        const C = Math.log10(caValue) - 0.4;
-        const D = Math.log10(alkValue);
-        const pHs = (9.3 + A + B) - (C + D);
-        const lsiValue = phValue - pHs;
-        updated[poolId].lsi = Math.round(lsiValue * 100) / 100;
-      }
-      return updated;
-    });
-  };
-
-  const handleSaveDailyReads = async () => {
+  const handleSaveDaily = async () => {
     if (!userId) return;
-    const dayIndex = weekdays.indexOf(activeTab);
-    const targetDate = setDay(new Date(), dayIndex);
-    const formattedDate = format(targetDate, "yyyy-MM-dd");
+    const readsToInsert = Object.entries(dailyReads).map(([poolId, values]) => ({
+      pool_id: poolId,
+      user_id: userId,
+      ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === '' ? null : value]))
+    }));
 
-    const readsToUpsert = Object.entries(reads)
-      .filter(([_, values]) => values.chlorine || values.ph || values.temperature || values.flow)
-      .map(([poolId, values]) => {
-        const pool = pools.find((p) => p.id === poolId);
-        return {
-          pool_id: poolId,
-          user_id: userId,
-          read_date: formattedDate,
-          chlorine: parseFloat(values.chlorine) || null,
-          ph: parseFloat(values.ph) || null,
-          temperature: parseFloat(values.temperature) || null,
-          flow: parseFloat(values.flow) || null,
-          ...(pool?.pool_type === "standard" && {
-            influent: parseFloat(values.influent) || null,
-            effluent: parseFloat(values.effluent) || null,
-          }),
-        };
-      });
-
-    if (readsToUpsert.length === 0) {
+    if (readsToInsert.length === 0) {
       toast({ title: "No data to save", variant: "destructive" });
       return;
     }
 
-    const { error } = await supabase.from("daily_reads").upsert(readsToUpsert, { onConflict: 'pool_id,read_date' });
+    const { error } = await supabase.from("daily_reads").insert(readsToInsert);
     if (error) {
-      toast({ title: "Error", description: `Could not save reads. A database constraint might be missing. ${error.message}`, variant: "destructive" });
+      toast({ title: "Error saving daily reads", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Success", description: `Reads for ${activeTab} saved!` });
+      toast({ title: "Success!", description: "Daily reads have been saved." });
     }
   };
-
+  
   const handleSaveWeekly = async () => {
     if (!userId) return;
-    const weeklyToInsert = Object.entries(weeklyReads)
-      .filter(([_, values]) => values.tds || values.alkalinity || values.calciumHardness)
-      .map(([poolId, values]) => ({
-        pool_id: poolId, user_id: userId, tds: parseFloat(values.tds) || null, alkalinity: parseFloat(values.alkalinity) || null,
-        calcium_hardness: parseFloat(values.calciumHardness) || null, saturation_index: values.lsi,
-      }));
-    if (weeklyToInsert.length === 0) {
+    const readsToInsert = Object.entries(weeklyReads).map(([poolId, values]) => ({
+      pool_id: poolId,
+      user_id: userId,
+      ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === '' ? null : value]))
+    }));
+
+    if (readsToInsert.length === 0) {
       toast({ title: "No data to save", variant: "destructive" });
       return;
     }
-    const { error } = await supabase.from("weekly_reads").insert(weeklyToInsert);
+
+    const { error } = await supabase.from("weekly_reads").insert(readsToInsert);
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error saving weekly reads", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Success", description: "All weekly reads saved!" });
-      fetchLatestWeeklyReads(pools);
+      toast({ title: "Success!", description: "Weekly reads have been saved." });
     }
   };
 
-  const handlePrint = () => window.print();
+  const renderPoolFields = (pool: Pool) => {
+    const poolName = pool.name;
+    const resortName = resort?.name;
+    const values = dailyReads[pool.id] || {};
 
-  const renderSkeletons = () => (
-    <div className="space-y-4 mt-6">
-      {[...Array(4)].map((_, i) => (
-        <Card key={i}>
-          <CardHeader><Skeleton className="h-6 w-48" /></CardHeader>
-          <CardContent><Skeleton className="h-10 w-full" /></CardContent>
-        </Card>
-      ))}
-    </div>
-  );
+    const standardFields = (
+      <>
+        <div className="space-y-1"><Label>Chlorine</Label><Input type="number" step="0.1" value={values.chlorine || ""} onChange={e => handleDailyChange(pool.id, 'chlorine', e.target.value)} /></div>
+        <div className="space-y-1"><Label>pH</Label><Input type="number" step="0.1" value={values.ph || ""} onChange={e => handleDailyChange(pool.id, 'ph', e.target.value)} /></div>
+        <div className="space-y-1"><Label>Temperature</Label><Input type="number" step="0.1" value={values.temperature || ""} onChange={e => handleDailyChange(pool.id, 'temperature', e.target.value)} /></div>
+        <div className="space-y-1"><Label>Flow</Label><Input type="number" step="0.1" value={values.flow || ""} onChange={e => handleDailyChange(pool.id, 'flow', e.target.value)} /></div>
+        <div className="space-y-1"><Label>Influent</Label><Input type="number" step="0.1" value={values.influent || ""} onChange={e => handleDailyChange(pool.id, 'influent', e.target.value)} /></div>
+        <div className="space-y-1"><Label>Effluent</Label><Input type="number" step="0.1" value={values.effluent || ""} onChange={e => handleDailyChange(pool.id, 'effluent', e.target.value)} /></div>
+      </>
+    );
 
-  if (loading) return <div className="min-h-screen bg-background p-4"><div className="max-w-6xl mx-auto">{renderSkeletons()}</div></div>;
-  if (!resort) return <div className="flex min-h-screen items-center justify-center">Resort not found.</div>;
+    const workOrderFields = (
+      <>
+        <div className="space-y-1"><Label>W.O.# 1</Label><Input value={values.work_order_1 || ""} onChange={e => handleDailyChange(pool.id, 'work_order_1', e.target.value)} /></div>
+        <div className="space-y-1"><Label>W.O.# 2</Label><Input value={values.work_order_2 || ""} onChange={e => handleDailyChange(pool.id, 'work_order_2', e.target.value)} /></div>
+        <div className="space-y-1"><Label>W.O.# 3</Label><Input value={values.work_order_3 || ""} onChange={e => handleDailyChange(pool.id, 'work_order_3', e.target.value)} /></div>
+        <div className="space-y-1"><Label>W.O.# 4</Label><Input value={values.work_order_4 || ""} onChange={e => handleDailyChange(pool.id, 'work_order_4', e.target.value)} /></div>
+      </>
+    );
 
-  const DailyReadsForm = ({ day }: { day: string }) => (
-    <div className="space-y-4 print:space-y-2 mt-6">
-      <div className="flex justify-end mb-4 print:hidden">
-        <Button onClick={handleSaveDailyReads}>Save Reads for {day}</Button>
-      </div>
-      {pools.map((pool) => {
-        const poolReadData = reads[pool.id];
-        if (!poolReadData) return null;
-        return (
-          <Card key={pool.id} className="print:break-inside-avoid print:shadow-none print:mb-1">
-            <CardHeader className="py-2 print:py-1"><CardTitle className="text-base print:text-sm">{pool.name}</CardTitle></CardHeader>
-            <CardContent className="py-2 print:py-1">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 print:gap-1">
-                <div className="space-y-1"><Label htmlFor={`${pool.id}-chlorine`} className="text-xs print:text-[10px]">Chlorine</Label><Input id={`${pool.id}-chlorine`} type="number" step="0.01" value={poolReadData.chlorine} onChange={(e) => handleInputChange(pool.id, "chlorine", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-                <div className="space-y-1"><Label htmlFor={`${pool.id}-ph`} className="text-xs print:text-[10px]">pH</Label><Input id={`${pool.id}-ph`} type="number" step="0.01" value={poolReadData.ph} onChange={(e) => handleInputChange(pool.id, "ph", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-                <div className="space-y-1"><Label htmlFor={`${pool.id}-temperature`} className="text-xs print:text-[10px]">Temperature</Label><Input id={`${pool.id}-temperature`} type="number" step="0.1" value={poolReadData.temperature} onChange={(e) => handleInputChange(pool.id, "temperature", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-                <div className="space-y-1"><Label htmlFor={`${pool.id}-flow`} className="text-xs print:text-[10px]">Flow</Label><Input id={`${pool.id}-flow`} type="number" step="0.01" value={poolReadData.flow} onChange={(e) => handleInputChange(pool.id, "flow", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-                {pool.pool_type === "standard" && (<>
-                  <div className="space-y-1"><Label htmlFor={`${pool.id}-influent`} className="text-xs print:text-[10px]">Influent</Label><Input id={`${pool.id}-influent`} type="number" step="0.01" value={poolReadData.influent} onChange={(e) => handleInputChange(pool.id, "influent", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-                  <div className="space-y-1"><Label htmlFor={`${pool.id}-effluent`} className="text-xs print:text-[10px]">Effluent</Label><Input id={`${pool.id}-effluent`} type="number" step="0.01" value={poolReadData.effluent} onChange={(e) => handleInputChange(pool.id, "effluent", e.target.value)} className="h-8 print:h-6 text-sm print:text-xs" /></div>
-                </>)}
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-    </div>
-  );
+    if (resortName === "Grand Floridian Resort PM") {
+      if (poolName === "Court Yard Fountain") return <div className="grid md:grid-cols-6 gap-4"><div className="space-y-1"><Label>Bromine</Label><Input type="number" step="0.1" value={values.bromine || ""} onChange={e => handleDailyChange(pool.id, 'bromine', e.target.value)} /></div><div className="space-y-1"><Label>pH</Label><Input type="number" step="0.1" value={values.ph || ""} onChange={e => handleDailyChange(pool.id, 'ph', e.target.value)} /></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.scrubbed} onCheckedChange={c => handleDailyChange(pool.id, 'scrubbed', !!c)} /><Label>Scrubbed</Label></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.vacuumed} onCheckedChange={c => handleDailyChange(pool.id, 'vacuumed', !!c)} /><Label>Vacuumed</Label></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.drain_fill} onCheckedChange={c => handleDailyChange(pool.id, 'drain_fill', !!c)} /><Label>Drain/Fill</Label></div></div>;
+      if (poolName === "Founder's Fountain") return <div className="grid md:grid-cols-6 gap-4"><div className="space-y-1"><Label>Chlorine</Label><Input type="number" step="0.1" value={values.chlorine || ""} onChange={e => handleDailyChange(pool.id, 'chlorine', e.target.value)} /></div><div className="space-y-1"><Label>pH</Label><Input type="number" step="0.1" value={values.ph || ""} onChange={e => handleDailyChange(pool.id, 'ph', e.target.value)} /></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.scrubbed} onCheckedChange={c => handleDailyChange(pool.id, 'scrubbed', !!c)} /><Label>Scrubbed</Label></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.vacuumed} onCheckedChange={c => handleDailyChange(pool.id, 'vacuumed', !!c)} /><Label>Vacuumed</Label></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.drain_fill} onCheckedChange={c => handleDailyChange(pool.id, 'drain_fill', !!c)} /><Label>Drain/Fill</Label></div></div>;
+      if (poolName === "Pinguin's Fountain") return <div className="grid md:grid-cols-6 gap-4"><div className="space-y-1"><Label>Bromine</Label><Input type="number" step="0.1" value={values.bromine || ""} onChange={e => handleDailyChange(pool.id, 'bromine', e.target.value)} /></div><div className="space-y-1"><Label>pH</Label><Input type="number" step="0.1" value={values.ph || ""} onChange={e => handleDailyChange(pool.id, 'ph', e.target.value)} /></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.scrubbed} onCheckedChange={c => handleDailyChange(pool.id, 'scrubbed', !!c)} /><Label>Scrubbed</Label></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.backwash} onCheckedChange={c => handleDailyChange(pool.id, 'backwash', !!c)} /><Label>Backwash/Drain</Label></div><div className="flex items-center gap-2 pt-6"><Checkbox checked={values.decoin} onCheckedChange={c => handleDailyChange(pool.id, 'decoin', !!c)} /><Label>Decoin</Label></div></div>;
+      if (poolName === "Men Spa" || poolName === "Women Spa") return <div className="space-y-4"><div className="grid md:grid-cols-6 gap-4">{standardFields}</div><div className="flex items-center gap-8"><div className="flex items-center gap-2"><Checkbox checked={values.drain_fill} onCheckedChange={c => handleDailyChange(pool.id, 'drain_fill', !!c)} /><Label>Drain/Fill</Label></div><div className="flex items-center gap-2"><Checkbox checked={values.tiles} onCheckedChange={c => handleDailyChange(pool.id, 'tiles', !!c)} /><Label>Tiles</Label></div></div><div className="grid md:grid-cols-4 gap-4">{workOrderFields}</div></div>;
+    }
+
+    return <div className="space-y-4"><div className="grid md:grid-cols-6 gap-4">{standardFields}</div><div className="grid md:grid-cols-4 gap-4">{workOrderFields}</div></div>;
+  };
+
+  if (loading) return <div className="p-4">Loading...</div>;
+  if (!resort) return <div className="p-4">Resort not found.</div>;
 
   return (
     <div className="min-h-screen bg-background p-4">
-      <div className="max-w-6xl mx-auto space-y-6">
-        <div className="flex justify-between items-center print:hidden">
-          <Button variant="outline" onClick={() => navigate("/")}>← Back</Button>
-          <Button variant="outline" onClick={handlePrint}>Print</Button>
+      <div className="max-w-7xl mx-auto space-y-6">
+        <div className="flex justify-between items-center">
+          <Button variant="outline" onClick={() => navigate("/dashboard")}>← Back</Button>
+          <h1 className="text-3xl font-bold">{resort.name}</h1>
+          <Button variant="outline" onClick={() => window.print()}>Print</Button>
         </div>
-        <Card className="print:shadow-none">
-          <CardHeader><CardTitle className="text-2xl">{resort.name}</CardTitle></CardHeader>
-          <CardContent>
-            <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-8 print:hidden">
-                {weekdays.map(day => <TabsTrigger key={day} value={day}>{day.substring(0, 3)}</TabsTrigger>)}
-                <TabsTrigger value="weekly">TDS</TabsTrigger>
-              </TabsList>
-              {weekdays.map(day => <TabsContent key={day} value={day}><DailyReadsForm day={day} /></TabsContent>)}
-              <TabsContent value="weekly" className="space-y-4 print:space-y-2 mt-6">
-                <div className="flex justify-end mb-4 print:hidden"><Button onClick={handleSaveWeekly}>Save All Weekly Reads</Button></div>
-                {pools.map((pool) => {
-                  const weeklyReadData = weeklyReads[pool.id];
-                  if (!weeklyReadData) return null;
+
+        <Card>
+          <CardContent className="p-6">
+            <Tabs defaultValue="daily">
+              <div className="flex justify-between items-center mb-4">
+                <TabsList>
+                  <TabsTrigger value="daily">Daily Reads</TabsTrigger>
+                  <TabsTrigger value="weekly">TDS (Weekly Reads)</TabsTrigger>
+                </TabsList>
+                <TabsContent value="daily" className="m-0"><Button onClick={handleSaveDaily}>Save All Daily Reads</Button></TabsContent>
+                <TabsContent value="weekly" className="m-0"><Button onClick={handleSaveWeekly}>Save All Weekly Reads</Button></TabsContent>
+              </div>
+
+              <TabsContent value="daily" className="space-y-6">
+                {pools.map(pool => (
+                  <Card key={pool.id}>
+                    <CardHeader><CardTitle>{pool.name}</CardTitle></CardHeader>
+                    <CardContent>{renderPoolFields(pool)}</CardContent>
+                  </Card>
+                ))}
+              </TabsContent>
+
+              <TabsContent value="weekly" className="space-y-6">
+                {pools.map(pool => {
+                  const values = weeklyReads[pool.id] || {};
                   return (
-                    <Card key={pool.id} className="print:break-inside-avoid print:shadow-none">
-                      <CardHeader className="print:py-2"><CardTitle className="text-lg print:text-base">{pool.name}</CardTitle>
-                        {latestWeeklyReads[pool.id] && latestWeeklyReads[pool.id].read_date && (<CardDescription className="text-xs">Last: {format(parseISO(latestWeeklyReads[pool.id].read_date), "M/d/yy")}</CardDescription>)}
-                      </CardHeader>
-                      <CardContent className="print:py-2">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:gap-2">
-                          <div className="space-y-1"><Label htmlFor={`${pool.id}-tds`} className="text-xs">TDS</Label><Input id={`${pool.id}-tds`} type="number" step="0.01" value={weeklyReadData.tds} onChange={(e) => handleWeeklyInputChange(pool.id, "tds", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
-                          <div className="space-y-1"><Label htmlFor={`${pool.id}-alkalinity`} className="text-xs">Alkalinity</Label><Input id={`${pool.id}-alkalinity`} type="number" step="0.01" value={weeklyReadData.alkalinity} onChange={(e) => handleWeeklyInputChange(pool.id, "alkalinity", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
-                          <div className="space-y-1"><Label htmlFor={`${pool.id}-calcium`} className="text-xs">Calcium Hardness</Label><Input id={`${pool.id}-calcium`} type="number" step="0.01" value={weeklyReadData.calciumHardness} onChange={(e) => handleWeeklyInputChange(pool.id, "calciumHardness", e.target.value)} className="h-9 print:h-8 text-sm" /></div>
-                          <div className="space-y-1"><Label htmlFor={`${pool.id}-lsi`} className="text-xs">Saturation Index (LSI)</Label><Input id={`${pool.id}-lsi`} type="number" step="0.01" value={weeklyReadData.lsi !== null ? weeklyReadData.lsi : ""} readOnly placeholder="Auto-calculated" className="h-9 print:h-8 text-sm bg-muted" />
-                            {weeklyReadData.lsi !== null && (<p className="text-xs mt-1">{weeklyReadData.lsi! < -0.5 ? (<span className="text-destructive font-medium">⚠️ Corrosive - Needs Treatment</span>) : weeklyReadData.lsi! > 0.5 ? (<span className="text-destructive font-medium">⚠️ Scale-Forming - Needs Treatment</span>) : (<span className="text-green-600 font-medium">✓ Balanced - No Treatment Needed</span>)}</p>)}
-                          </div>
+                    <Card key={pool.id}>
+                      <CardHeader><CardTitle>{pool.name}</CardTitle></CardHeader>
+                      <CardContent>
+                        <div className="grid md:grid-cols-4 gap-4">
+                          <div className="space-y-1"><Label>TDS</Label><Input type="number" step="0.1" value={values.tds || ""} onChange={e => handleWeeklyChange(pool.id, 'tds', e.target.value)} /></div>
+                          <div className="space-y-1"><Label>Alkalinity</Label><Input type="number" step="0.1" value={values.alkalinity || ""} onChange={e => handleWeeklyChange(pool.id, 'alkalinity', e.target.value)} /></div>
+                          <div className="space-y-1"><Label>Calcium Hardness</Label><Input type="number" step="0.1" value={values.calcium_hardness || ""} onChange={e => handleWeeklyChange(pool.id, 'calcium_hardness', e.target.value)} /></div>
+                          <div className="space-y-1"><Label>Saturation Index</Label><Input type="number" step="0.1" value={values.saturation_index || ""} onChange={e => handleWeeklyChange(pool.id, 'saturation_index', e.target.value)} /></div>
                         </div>
                       </CardContent>
                     </Card>

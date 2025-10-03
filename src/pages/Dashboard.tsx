@@ -1,56 +1,71 @@
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArrowRight } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Tables } from "@/integrations/supabase/types";
+import MainLayout from "@/components/MainLayout";
+
+type Resort = Tables<"resorts">;
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [resorts, setResorts] = useState<Resort[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
+  useEffect(() => {
+    fetchResorts();
+  }, []);
+
+  const fetchResorts = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("resorts").select("*").order("name");
+    if (error) {
+      toast({ title: "Error fetching resorts", description: error.message, variant: "destructive" });
+    } else {
+      setResorts(data || []);
+    }
+    setLoading(false);
   };
 
-  const navItems = [
-    { path: "/resorts", label: "Daily/Weekly Reads" },
-    { path: "/bungalows", label: "Bungalows" },
-    { path: "/weekly-schedule", label: "Weekly Schedule" },
-    { path: "/reports", label: "View Reports" },
-    { path: "/treatment-dashboard", label: "Treatment Dashboard" },
-    { path: "/water-balanced", label: "Water Balanced" },
-  ];
+  const handleResortClick = (resort: Resort) => {
+    if (resort.name === "Polynesian Bungalows") {
+      navigate("/bungalows");
+    } else {
+      navigate(`/resort/${resort.id}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <MainLayout title="Pool Reads Dashboard">
+        <div>Loading resorts...</div>
+      </MainLayout>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background p-4">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <Button variant="outline" onClick={handleLogout}>
-            Sign Out
-          </Button>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome!</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            {navItems.map((item) => (
-              <Button
-                key={item.path}
-                variant="outline"
-                className="w-full justify-between h-12 text-lg"
-                onClick={() => navigate(item.path)}
-              >
-                {item.label}
-                <ArrowRight className="h-5 w-5" />
-              </Button>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+    <MainLayout title="Pool Reads Dashboard">
+      <Card>
+        <CardHeader>
+          <CardTitle>Select Resort</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {resorts.map((resort) => (
+            <Button
+              key={resort.id}
+              variant="outline"
+              className="w-full justify-start h-14 text-lg"
+              onClick={() => handleResortClick(resort)}
+            >
+              {resort.name}
+            </Button>
+          ))}
+        </CardContent>
+      </Card>
+    </MainLayout>
   );
 };
 

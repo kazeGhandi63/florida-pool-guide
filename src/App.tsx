@@ -7,7 +7,6 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import ResortReads from "./pages/ResortReads";
-import PoolReads from "./pages/PoolReads";
 import BungalowReads from "./pages/BungalowReads";
 import WeeklySchedule from "./pages/WeeklySchedule";
 import Reports from "./pages/Reports";
@@ -24,11 +23,10 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/" element={<Index />} />
           <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/resorts" element={<ResortReads />} />
-          <Route path="/pools" element={<PoolReads />} />
+          <Route path="/resort/:resortId" element={<ResortReads />} />
           <Route path="/bungalows" element={<BungalowReads />} />
           <Route path="/weekly-schedule" element={<WeeklySchedule />} />
           <Route path="/reports" element={<Reports />} />
