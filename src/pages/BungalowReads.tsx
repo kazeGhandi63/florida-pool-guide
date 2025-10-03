@@ -254,17 +254,20 @@ const BungalowReads = () => {
   const handleLogTreatment = async (poolId: string) => {
     if (!userId || !treatmentSuggestions[poolId]) return;
     const suggestion = treatmentSuggestions[poolId];
+    const latestRead = latestWeeklyReads[poolId];
     
     if (suggestion.bicarb === 0 && suggestion.calcium === 0) {
       toast({ title: "No treatment needed", description: "Water is balanced according to the rules." });
       return;
     }
 
-    const treatmentData: any = {
-      pool_id: poolId,
+    const treatmentData = {
+      bungalow_id: poolId,
       user_id: userId,
-      bicarb_cups_added: suggestion.bicarb,
-      calcium_cups_added: suggestion.calcium,
+      alkalinity_reading: latestRead?.alkalinity,
+      calcium_reading: latestRead?.calcium_hardness,
+      alkalinity_treatment_cups: suggestion.bicarb,
+      calcium_treatment_cups: suggestion.calcium,
     };
 
     const { error } = await supabase.from("treatments").insert(treatmentData);
@@ -352,7 +355,7 @@ const BungalowReads = () => {
     <div className="min-h-screen bg-background p-4">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex justify-between items-center print:hidden">
-          <Button variant="outline" onClick={() => navigate("/")}>← Back</Button>
+          <Button variant="outline" onClick={() => navigate("/dashboard")}>← Back</Button>
           <Button variant="outline" onClick={handlePrint}>Print</Button>
         </div>
         <Card className="print:shadow-none">

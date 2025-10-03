@@ -6,7 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
@@ -18,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Printer, Pencil, Trash2, Save, XCircle } from "lucide-react";
+import { Pencil, Trash2, Save, XCircle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 type DailyRead = {
@@ -30,8 +29,8 @@ type DailyRead = {
   flow: number | null;
   influent: number | null;
   effluent: number | null;
-  pools: { name: string; resorts: { name: string } };
-  profiles: { pool_attendant: string };
+  pools: { name: string; resorts: { name: string } } | null;
+  profiles: { pool_attendant: string } | null;
 };
 
 type WeeklyRead = {
@@ -41,8 +40,8 @@ type WeeklyRead = {
   alkalinity: number | null;
   calcium_hardness: number | null;
   saturation_index: number | null;
-  pools: { name: string; resorts: { name: string } };
-  profiles: { pool_attendant: string };
+  pools: { name: string; resorts: { name: string } } | null;
+  profiles: { pool_attendant: string } | null;
 };
 
 const Reports = () => {
@@ -51,7 +50,6 @@ const Reports = () => {
   const [dailyReads, setDailyReads] = useState<DailyRead[]>([]);
   const [weeklyReads, setWeeklyReads] = useState<WeeklyRead[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDailyReads, setSelectedDailyReads] = useState<Set<string>>(new Set());
 
   const [editingDailyRead, setEditingDailyRead] = useState<Partial<DailyRead> | null>(null);
   const [dailyReadToDelete, setDailyReadToDelete] = useState<DailyRead | null>(null);
@@ -81,12 +79,12 @@ const Reports = () => {
     if (dailyResult.error) {
       toast({ title: "Error fetching daily reads", description: dailyResult.error.message, variant: "destructive" });
     } else {
-      setDailyReads(dailyResult.data || []);
+      setDailyReads((dailyResult.data as unknown as DailyRead[]) || []);
     }
     if (weeklyResult.error) {
       toast({ title: "Error fetching weekly reads", description: weeklyResult.error.message, variant: "destructive" });
     } else {
-      setWeeklyReads(weeklyResult.data || []);
+      setWeeklyReads((weeklyResult.data as unknown as WeeklyRead[]) || []);
     }
     setLoading(false);
   };
@@ -162,11 +160,6 @@ const Reports = () => {
     }
   };
 
-  // --- Print Handler ---
-  const handlePrint = () => {
-    // ... existing print logic
-  };
-
   if (loading) return <div className="min-h-screen bg-background p-4">Loading...</div>;
 
   return (
@@ -211,9 +204,9 @@ const Reports = () => {
                         editingDailyRead?.id === read.id ? (
                           <TableRow key={read.id}>
                             <TableCell>{format(parseISO(read.read_date), "MMM d, yyyy")}</TableCell>
-                            <TableCell>{read.pools.resorts.name}</TableCell>
-                            <TableCell>{read.pools.name}</TableCell>
-                            <TableCell>{read.profiles.pool_attendant}</TableCell>
+                            <TableCell>{read.pools?.resorts.name}</TableCell>
+                            <TableCell>{read.pools?.name}</TableCell>
+                            <TableCell>{read.profiles?.pool_attendant}</TableCell>
                             <TableCell><Input type="number" value={editingDailyRead.chlorine ?? ""} onChange={(e) => setEditingDailyRead({ ...editingDailyRead, chlorine: parseFloat(e.target.value) })} className="w-20" /></TableCell>
                             <TableCell><Input type="number" value={editingDailyRead.ph ?? ""} onChange={(e) => setEditingDailyRead({ ...editingDailyRead, ph: parseFloat(e.target.value) })} className="w-20" /></TableCell>
                             <TableCell><Input type="number" value={editingDailyRead.temperature ?? ""} onChange={(e) => setEditingDailyRead({ ...editingDailyRead, temperature: parseFloat(e.target.value) })} className="w-20" /></TableCell>
@@ -228,9 +221,9 @@ const Reports = () => {
                         ) : (
                           <TableRow key={read.id}>
                             <TableCell>{format(parseISO(read.read_date), "MMM d, yyyy")}</TableCell>
-                            <TableCell>{read.pools.resorts.name}</TableCell>
-                            <TableCell>{read.pools.name}</TableCell>
-                            <TableCell>{read.profiles.pool_attendant}</TableCell>
+                            <TableCell>{read.pools?.resorts.name}</TableCell>
+                            <TableCell>{read.pools?.name}</TableCell>
+                            <TableCell>{read.profiles?.pool_attendant}</TableCell>
                             <TableCell className={isValueOutOfRange('chlorine', read.chlorine) ? 'text-destructive' : ''}>{read.chlorine ?? "-"}</TableCell>
                             <TableCell className={isValueOutOfRange('ph', read.ph) ? 'text-destructive' : ''}>{read.ph ?? "-"}</TableCell>
                             <TableCell className={isValueOutOfRange('temperature', read.temperature) ? 'text-destructive' : ''}>{read.temperature ?? "-"}</TableCell>
@@ -272,9 +265,9 @@ const Reports = () => {
                         editingWeeklyRead?.id === read.id ? (
                           <TableRow key={read.id}>
                             <TableCell>{format(parseISO(read.read_date), "MMM d, yyyy")}</TableCell>
-                            <TableCell>{read.pools.resorts.name}</TableCell>
-                            <TableCell>{read.pools.name}</TableCell>
-                            <TableCell>{read.profiles.pool_attendant}</TableCell>
+                            <TableCell>{read.pools?.resorts.name}</TableCell>
+                            <TableCell>{read.pools?.name}</TableCell>
+                            <TableCell>{read.profiles?.pool_attendant}</TableCell>
                             <TableCell><Input type="number" value={editingWeeklyRead.tds ?? ""} onChange={(e) => setEditingWeeklyRead({ ...editingWeeklyRead, tds: parseFloat(e.target.value) })} className="w-20" /></TableCell>
                             <TableCell><Input type="number" value={editingWeeklyRead.alkalinity ?? ""} onChange={(e) => setEditingWeeklyRead({ ...editingWeeklyRead, alkalinity: parseFloat(e.target.value) })} className="w-20" /></TableCell>
                             <TableCell><Input type="number" value={editingWeeklyRead.calcium_hardness ?? ""} onChange={(e) => setEditingWeeklyRead({ ...editingWeeklyRead, calcium_hardness: parseFloat(e.target.value) })} className="w-24" /></TableCell>
@@ -288,9 +281,9 @@ const Reports = () => {
                         ) : (
                           <TableRow key={read.id}>
                             <TableCell>{format(parseISO(read.read_date), "MMM d, yyyy")}</TableCell>
-                            <TableCell>{read.pools.resorts.name}</TableCell>
-                            <TableCell>{read.pools.name}</TableCell>
-                            <TableCell>{read.profiles.pool_attendant}</TableCell>
+                            <TableCell>{read.pools?.resorts.name}</TableCell>
+                            <TableCell>{read.pools?.name}</TableCell>
+                            <TableCell>{read.profiles?.pool_attendant}</TableCell>
                             <TableCell>{read.tds ?? "-"}</TableCell>
                             <TableCell className={isValueOutOfRange('alkalinity', read.alkalinity) ? 'text-destructive' : ''}>{read.alkalinity ?? "-"}</TableCell>
                             <TableCell className={isValueOutOfRange('calcium_hardness', read.calcium_hardness) ? 'text-destructive' : ''}>{read.calcium_hardness ?? "-"}</TableCell>

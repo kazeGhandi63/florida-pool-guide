@@ -7,52 +7,118 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "13.0.5"
-  }
   public: {
     Tables: {
-      daily_reads: {
+      bungalows: {
         Row: {
-          chlorine: number | null
-          created_at: string | null
-          effluent: number | null
-          flow: number | null
           id: string
-          influent: number | null
-          ph: number | null
-          pool_id: string | null
-          read_date: string | null
-          temperature: number | null
-          user_id: string | null
+          user_id: string
+          name: string
+          location: string | null
+          created_at: string | null
         }
         Insert: {
-          chlorine?: number | null
-          created_at?: string | null
-          effluent?: number | null
-          flow?: number | null
           id?: string
-          influent?: number | null
-          ph?: number | null
-          pool_id?: string | null
-          read_date?: string | null
-          temperature?: number | null
-          user_id?: string | null
+          user_id: string
+          name: string
+          location?: string | null
+          created_at?: string | null
         }
         Update: {
-          chlorine?: number | null
-          created_at?: string | null
-          effluent?: number | null
-          flow?: number | null
           id?: string
-          influent?: number | null
-          ph?: number | null
+          user_id?: string
+          name?: string
+          location?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bungalows_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      daily_reads: {
+        Row: {
+          id: string
+          pool_id: string | null
+          user_id: string
+          read_date: string | null
+          chlorine: number | null
+          ph: number | null
+          bromine: number | null
+          temperature: number | null
+          flow: number | null
+          influent: number | null
+          effluent: number | null
+          scrubbed: boolean | null
+          vacuumed: boolean | null
+          drain_fill: boolean | null
+          tiles: boolean | null
+          decoin: boolean | null
+          backwash: boolean | null
+          work_order_1: string | null
+          work_order_2: string | null
+          work_order_3: string | null
+          work_order_4: string | null
+          work_order_temp: string | null
+          work_order_flow: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
           pool_id?: string | null
+          user_id: string
           read_date?: string | null
+          chlorine?: number | null
+          ph?: number | null
+          bromine?: number | null
           temperature?: number | null
-          user_id?: string | null
+          flow?: number | null
+          influent?: number | null
+          effluent?: number | null
+          scrubbed?: boolean | null
+          vacuumed?: boolean | null
+          drain_fill?: boolean | null
+          tiles?: boolean | null
+          decoin?: boolean | null
+          backwash?: boolean | null
+          work_order_1?: string | null
+          work_order_2?: string | null
+          work_order_3?: string | null
+          work_order_4?: string | null
+          work_order_temp?: string | null
+          work_order_flow?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          pool_id?: string | null
+          user_id?: string
+          read_date?: string | null
+          chlorine?: number | null
+          ph?: number | null
+          bromine?: number | null
+          temperature?: number | null
+          flow?: number | null
+          influent?: number | null
+          effluent?: number | null
+          scrubbed?: boolean | null
+          vacuumed?: boolean | null
+          drain_fill?: boolean | null
+          tiles?: boolean | null
+          decoin?: boolean | null
+          backwash?: boolean | null
+          work_order_1?: string | null
+          work_order_2?: string | null
+          work_order_3?: string | null
+          work_order_4?: string | null
+          work_order_temp?: string | null
+          work_order_flow?: string | null
+          created_at?: string | null
         }
         Relationships: [
           {
@@ -66,32 +132,32 @@ export type Database = {
             foreignKeyName: "daily_reads_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       pools: {
         Row: {
-          created_at: string | null
           id: string
+          resort_id: string | null
           name: string
           pool_type: string
-          resort_id: string | null
+          created_at: string | null
         }
         Insert: {
-          created_at?: string | null
           id?: string
+          resort_id?: string | null
           name: string
           pool_type: string
-          resort_id?: string | null
+          created_at?: string | null
         }
         Update: {
-          created_at?: string | null
           id?: string
+          resort_id?: string | null
           name?: string
           pool_type?: string
-          resort_id?: string | null
+          created_at?: string | null
         }
         Relationships: [
           {
@@ -100,126 +166,293 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "resorts"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       profiles: {
         Row: {
+          id: string
+          pool_attendant: string
           attendant_id: string
           created_at: string | null
-          id: string
-          pool_attendant: string
         }
         Insert: {
-          attendant_id: string
-          created_at?: string | null
           id: string
           pool_attendant: string
+          attendant_id: string
+          created_at?: string | null
         }
         Update: {
-          attendant_id?: string
-          created_at?: string | null
           id?: string
           pool_attendant?: string
-        }
-        Relationships: []
-      }
-      resorts: {
-        Row: {
-          created_at: string | null
-          id: string
-          name: string
-        }
-        Insert: {
+          attendant_id?: string
           created_at?: string | null
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          name?: string
-        }
-        Relationships: []
-      }
-      treatments: {
-        Row: {
-          id: string
-          created_at: string
-          pool_id: string
-          user_id: string
-          bicarb_cups_added: number | null
-          calcium_cups_added: number | null
-          treatment_date: string
-        }
-        Insert: {
-          id?: string
-          created_at?: string
-          pool_id: string
-          user_id: string
-          bicarb_cups_added?: number | null
-          calcium_cups_added?: number | null
-          treatment_date?: string
-        }
-        Update: {
-          id?: string
-          created_at?: string
-          pool_id?: string
-          user_id?: string
-          bicarb_cups_added?: number | null
-          calcium_cups_added?: number | null
-          treatment_date?: string
         }
         Relationships: [
           {
-            foreignKeyName: "treatments_pool_id_fkey"
+            foreignKeyName: "profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      resorts: {
+        Row: {
+          id: string
+          name: string
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          name: string
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          name?: string
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      rolling_daily_reads: {
+        Row: {
+          id: string
+          pool_id: string
+          user_id: string
+          week_number: number
+          day_of_week: number
+          chlorine: number | null
+          ph: number | null
+          bromine: number | null
+          temperature: number | null
+          flow: number | null
+          influent: number | null
+          effluent: number | null
+          scrubbed: boolean | null
+          vacuumed: boolean | null
+          drain_fill: boolean | null
+          tiles: boolean | null
+          decoin: boolean | null
+          backwash: boolean | null
+          work_order_1: string | null
+          work_order_2: string | null
+          work_order_3: string | null
+          work_order_4: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          pool_id: string
+          user_id: string
+          week_number: number
+          day_of_week: number
+          chlorine?: number | null
+          ph?: number | null
+          bromine?: number | null
+          temperature?: number | null
+          flow?: number | null
+          influent?: number | null
+          effluent?: number | null
+          scrubbed?: boolean | null
+          vacuumed?: boolean | null
+          drain_fill?: boolean | null
+          tiles?: boolean | null
+          decoin?: boolean | null
+          backwash?: boolean | null
+          work_order_1?: string | null
+          work_order_2?: string | null
+          work_order_3?: string | null
+          work_order_4?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          pool_id?: string
+          user_id?: string
+          week_number?: number
+          day_of_week?: number
+          chlorine?: number | null
+          ph?: number | null
+          bromine?: number | null
+          temperature?: number | null
+          flow?: number | null
+          influent?: number | null
+          effluent?: number | null
+          scrubbed?: boolean | null
+          vacuumed?: boolean | null
+          drain_fill?: boolean | null
+          tiles?: boolean | null
+          decoin?: boolean | null
+          backwash?: boolean | null
+          work_order_1?: string | null
+          work_order_2?: string | null
+          work_order_3?: string | null
+          work_order_4?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rolling_daily_reads_pool_id_fkey"
             columns: ["pool_id"]
             isOneToOne: false
             referencedRelation: "pools"
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "rolling_daily_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      rolling_weekly_reads: {
+        Row: {
+          id: string
+          pool_id: string
+          user_id: string
+          week_number: number
+          tds: number | null
+          alkalinity: number | null
+          calcium_hardness: number | null
+          saturation_index: number | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          pool_id: string
+          user_id: string
+          week_number: number
+          tds?: number | null
+          alkalinity?: number | null
+          calcium_hardness?: number | null
+          saturation_index?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          pool_id?: string
+          user_id?: string
+          week_number?: number
+          tds?: number | null
+          alkalinity?: number | null
+          calcium_hardness?: number | null
+          saturation_index?: number | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rolling_weekly_reads_pool_id_fkey"
+            columns: ["pool_id"]
+            isOneToOne: false
+            referencedRelation: "pools"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rolling_weekly_reads_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      treatments: {
+        Row: {
+          id: string
+          bungalow_id: string
+          user_id: string
+          treatment_date: string | null
+          alkalinity_reading: number | null
+          calcium_reading: number | null
+          alkalinity_treatment_cups: number | null
+          calcium_treatment_cups: number | null
+          notes: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          bungalow_id: string
+          user_id: string
+          treatment_date?: string | null
+          alkalinity_reading?: number | null
+          calcium_reading?: number | null
+          alkalinity_treatment_cups?: number | null
+          calcium_treatment_cups?: number | null
+          notes?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          bungalow_id?: string
+          user_id?: string
+          treatment_date?: string | null
+          alkalinity_reading?: number | null
+          calcium_reading?: number | null
+          alkalinity_treatment_cups?: number | null
+          calcium_treatment_cups?: number | null
+          notes?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "treatments_bungalow_id_fkey"
+            columns: ["bungalow_id"]
+            isOneToOne: false
+            referencedRelation: "bungalows"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "treatments_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
       weekly_reads: {
         Row: {
-          alkalinity: number | null
-          calcium_hardness: number | null
-          created_at: string | null
           id: string
           pool_id: string | null
+          user_id: string
           read_date: string | null
-          saturation_index: number | null
           tds: number | null
-          user_id: string | null
+          alkalinity: number | null
+          calcium_hardness: number | null
+          saturation_index: number | null
+          created_at: string | null
         }
         Insert: {
-          alkalinity?: number | null
-          calcium_hardness?: number | null
-          created_at?: string | null
           id?: string
           pool_id?: string | null
+          user_id: string
           read_date?: string | null
-          saturation_index?: number | null
           tds?: number | null
-          user_id?: string | null
+          alkalinity?: number | null
+          calcium_hardness?: number | null
+          saturation_index?: number | null
+          created_at?: string | null
         }
         Update: {
-          alkalinity?: number | null
-          calcium_hardness?: number | null
-          created_at?: string | null
           id?: string
           pool_id?: string | null
+          user_id?: string
           read_date?: string | null
-          saturation_index?: number | null
           tds?: number | null
-          user_id?: string | null
+          alkalinity?: number | null
+          calcium_hardness?: number | null
+          saturation_index?: number | null
+          created_at?: string | null
         }
         Relationships: [
           {
@@ -233,9 +466,9 @@ export type Database = {
             foreignKeyName: "weekly_reads_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
-          },
+          }
         ]
       }
     }
@@ -243,7 +476,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      handle_new_user: {
+        Args: Record<PropertyKey, never>
+        Returns: Record<PropertyKey, never>
+      }
     }
     Enums: {
       [_ in never]: never
@@ -254,125 +490,5 @@ export type Database = {
   }
 }
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
-
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
-
-export type Tables<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R
-    }
-    ? R
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R
-      }
-      ? R
-      : never
-    : never
-
-export type TablesInsert<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I
-    }
-    ? I
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I
-      }
-      ? I
-      : never
-    : never
-
-export type TablesUpdate<
-  DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
-    | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
-> = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U
-    }
-    ? U
-    : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U
-      }
-      ? U
-      : never
-    : never
-
-export type Enums<
-  DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
-    | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
-> = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never
-
-export type CompositeTypes<
-  PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
-    | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals
-  }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
-> = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals
-}
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never
-
-export const Constants = {
-  public: {
-    Enums: {},
-  },
-} as const
+export type Tables<T extends keyof Database['public']['Tables']> = Database['public']['Tables'][T]['Row']
+export type Enums<T extends keyof Database['public']['Enums']> = Database['public']['Enums'][T]

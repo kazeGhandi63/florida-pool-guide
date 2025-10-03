@@ -11,6 +11,7 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [poolAttendant, setPoolAttendant] = useState("");
   const [attendantId, setAttendantId] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -23,29 +24,28 @@ const Auth = () => {
     try {
       if (isLogin) {
         const { error } = await supabase.auth.signInWithPassword({
-          email: `${attendantId}@poolreads.app`,
+          email: email,
           password,
         });
 
         if (error) throw error;
-        navigate("/");
+        navigate("/dashboard");
       } else {
         const { error } = await supabase.auth.signUp({
-          email: `${attendantId}@poolreads.app`,
+          email: email,
           password,
           options: {
             data: {
               pool_attendant: poolAttendant,
               attendant_id: attendantId,
             },
-            emailRedirectTo: `${window.location.origin}/`,
           },
         });
 
         if (error) throw error;
         toast({
           title: "Account created!",
-          description: "You can now log in with your credentials.",
+          description: "Please check your email to confirm your account, then you can log in.",
         });
         setIsLogin(true);
       }
@@ -64,7 +64,7 @@ const Auth = () => {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Pool Reads</CardTitle>
+          <CardTitle>Pool Maintenance</CardTitle>
           <CardDescription>
             {isLogin ? "Sign in to your account" : "Create a new account"}
           </CardDescription>
@@ -72,27 +72,39 @@ const Auth = () => {
         <CardContent>
           <form onSubmit={handleAuth} className="space-y-4">
             {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="poolAttendant">Pool Attendant</Label>
-                <Input
-                  id="poolAttendant"
-                  value={poolAttendant}
-                  onChange={(e) => setPoolAttendant(e.target.value)}
-                  required
-                />
-              </div>
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="poolAttendant">Pool Attendant Name</Label>
+                  <Input
+                    id="poolAttendant"
+                    value={poolAttendant}
+                    onChange={(e) => setPoolAttendant(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="attendantId">Attendant ID</Label>
+                  <Input
+                    id="attendantId"
+                    value={attendantId}
+                    onChange={(e) => setAttendantId(e.target.value)}
+                    required
+                  />
+                </div>
+              </>
             )}
             <div className="space-y-2">
-              <Label htmlFor="attendantId">Pool Attendant</Label>
+              <Label htmlFor="email">Email</Label>
               <Input
-                id="attendantId"
-                value={attendantId}
-                onChange={(e) => setAttendantId(e.target.value)}
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">PA ID</Label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 type="password"
