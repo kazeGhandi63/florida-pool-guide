@@ -263,8 +263,8 @@ const BungalowReads = () => {
     const treatmentData: any = {
       bungalow_id: poolId,
       user_id: userId,
-      bicarb: suggestion.bicarb,
-      calcium: suggestion.calcium,
+      alkalinity_treatment_cups: suggestion.bicarb,
+      calcium_treatment_cups: suggestion.calcium,
     };
 
     const { error } = await supabase.from("treatments").insert(treatmentData);
