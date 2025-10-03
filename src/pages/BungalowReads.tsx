@@ -178,6 +178,13 @@ const BungalowReads = () => {
     }
   };
 
+  const getLSIStatus = (lsi: number | null) => {
+    if (lsi === null) return { text: "", className: "" };
+    if (lsi < -0.5) return { text: "Water is corrosive", className: "text-destructive font-medium" };
+    if (lsi > 0.5) return { text: "Water is scale-forming", className: "text-destructive font-medium" };
+    return { text: "Water is balanced", className: "text-green-600 font-medium" };
+  };
+
   if (loading) return <div className="flex min-h-screen items-center justify-center">Loading Bungalow data...</div>;
 
   return (
@@ -238,11 +245,13 @@ const BungalowReads = () => {
             </div>
             {bungalows.map(bungalow => {
               const values = weeklyReads[bungalow.id] || {};
+              const lsiValue = values.saturation_index ? parseFloat(values.saturation_index) : null;
+              const lsiStatus = getLSIStatus(lsiValue);
               return (
                 <Card key={bungalow.id} className="print:break-inside-avoid">
                   <CardContent className="p-6">
                     <h3 className="font-bold text-lg mb-4">{bungalow.name}</h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-start">
                       <div className="space-y-1"><Label>TDS</Label><Input type="number" step="0.1" value={values.tds || ""} onChange={e => handleWeeklyChange(bungalow.id, 'tds', e.target.value)} /></div>
                       <div className="space-y-1"><Label>Alkalinity</Label><Input type="number" step="0.1" value={values.alkalinity || ""} onChange={e => handleWeeklyChange(bungalow.id, 'alkalinity', e.target.value)} /></div>
                       <div className="space-y-1"><Label>Calcium Hardness</Label><Input type="number" step="0.1" value={values.calcium_hardness || ""} onChange={e => handleWeeklyChange(bungalow.id, 'calcium_hardness', e.target.value)} /></div>
@@ -255,6 +264,11 @@ const BungalowReads = () => {
                           placeholder="Auto-calculated"
                           className="bg-muted cursor-not-allowed"
                         />
+                        {lsiValue !== null && (
+                          <p className={`text-sm pt-1 ${lsiStatus.className}`}>
+                            {lsiStatus.text}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </CardContent>
