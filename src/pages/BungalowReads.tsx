@@ -21,6 +21,22 @@ type DisplayBungalow = {
   lastTreatment: Treatment | null;
 };
 
+type DailyReadValues = {
+  chlorine?: string;
+  ph?: string;
+  temperature?: string;
+  flow?: string;
+  influent?: string;
+  effluent?: string;
+};
+
+type WeeklyReadValues = {
+  tds?: string;
+  alkalinity?: string;
+  calcium_hardness?: string;
+  saturation_index?: string;
+};
+
 const BungalowReads = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -30,6 +46,8 @@ const BungalowReads = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedBungalow, setSelectedBungalow] = useState<DisplayBungalow | null>(null);
   const [newReadings, setNewReadings] = useState({ alkalinity: "", calcium: "" });
+  const [dailyReads, setDailyReads] = useState<Record<string, DailyReadValues>>({});
+  const [weeklyReads, setWeeklyReads] = useState<Record<string, WeeklyReadValues>>({});
 
   useEffect(() => {
     const init = async () => {
@@ -48,7 +66,6 @@ const BungalowReads = () => {
   const fetchBungalowData = async (currentUserId: string) => {
     setLoading(true);
 
-    // 1. Get pools for the resort
     const { data: pools, error: poolsError } = await supabase
       .from("pools")
       .select("id, name, resorts!inner(name)")
@@ -65,7 +82,6 @@ const BungalowReads = () => {
       return;
     }
 
-    // 2. Get existing bungalows to check for missing ones
     const { data: existingBungalows, error: bungalowsError } = await supabase.from("bungalows").select("id, name");
     if (bungalowsError) {
       toast({ title: "Error fetching bungalows", description: bungalowsError.message, variant: "destructive" });
@@ -73,7 +89,6 @@ const BungalowReads = () => {
       return;
     }
 
-    // 3. Create any bungalows that are in the pools table but not the bungalows table
     const existingBungalowNames = new Set(existingBungalows.map(b => b.name));
     const bungalowsToCreate = pools
       .filter(p => !existingBungalowNames.has(p.name))
@@ -88,7 +103,6 @@ const BungalowReads = () => {
       }
     }
 
-    // 4. Now that all bungalows are guaranteed to exist, fetch them and the treatments
     const [bungalowsRes, treatmentsRes] = await Promise.all([
       supabase.from("bungalows").select("id, name"),
       supabase.from("treatments").select("*").order("treatment_date", { ascending: false }),
@@ -104,7 +118,6 @@ const BungalowReads = () => {
     const allTreatments = treatmentsRes.data || [];
     const bungalowMap = new Map(allBungalows.map(b => [b.name, b.id]));
 
-    // 5. Combine all data for display
     const combinedData: DisplayBungalow[] = pools
       .map(pool => {
         const bungalowId = bungalowMap.get(pool.name);
@@ -116,7 +129,7 @@ const BungalowReads = () => {
           lastTreatment: lastTreatment,
         };
       })
-      .filter(b => b.bungalowId); // Safeguard to ensure we only show linked bungalows
+      .filter(b => b.bungalowId);
 
     combinedData.sort((a, b) => {
       const numA = parseInt(a.name.match(/\d+/)?.[0] || "0");
@@ -131,10 +144,8 @@ const BungalowReads = () => {
   const calculateTreatment = (alkalinity: number | null, calcium: number | null) => {
     const suggestions = [];
     let isBalanced = true;
-
     const alk = alkalinity ?? 0;
     const calc = calcium ?? 0;
-
     if (alkalinity !== null && alk < 80) {
       const bicarbCups = Math.round((80 - alk) / 20);
       if (bicarbCups > 0) {
@@ -142,7 +153,6 @@ const BungalowReads = () => {
         isBalanced = false;
       }
     }
-
     if (calcium !== null && calc < 200) {
       const calciumCups = Math.round((200 - calc) / 40);
       if (calciumCups > 0) {
@@ -150,7 +160,6 @@ const BungalowReads = () => {
         isBalanced = false;
       }
     }
-
     return { suggestions, isBalanced };
   };
 
@@ -161,23 +170,16 @@ const BungalowReads = () => {
   };
 
   const handleLogTreatment = async () => {
-    if (!selectedBungalow || !userId || !selectedBungalow.bungalowId) {
-      toast({ title: "Error", description: "Cannot log treatment without a valid bungalow.", variant: "destructive" });
-      return;
-    }
-
+    if (!selectedBungalow || !userId || !selectedBungalow.bungalowId) return;
     const alkalinity_reading = parseFloat(newReadings.alkalinity);
     const calcium_reading = parseFloat(newReadings.calcium);
-
     if (isNaN(alkalinity_reading) || isNaN(calcium_reading)) {
       toast({ title: "Invalid input", description: "Please enter valid numbers for readings.", variant: "destructive" });
       return;
     }
-
     const { suggestions } = calculateTreatment(alkalinity_reading, calcium_reading);
     const alkalinity_treatment_cups = suggestions.find(s => s.chemical === 'Bicarb')?.cups || 0;
     const calcium_treatment_cups = suggestions.find(s => s.chemical === 'Calcium')?.cups || 0;
-
     const { error } = await supabase.from("treatments").insert({
       bungalow_id: selectedBungalow.bungalowId,
       user_id: userId,
@@ -187,13 +189,64 @@ const BungalowReads = () => {
       alkalinity_treatment_cups,
       calcium_treatment_cups,
     });
-
     if (error) {
       toast({ title: "Error Logging Treatment", description: error.message, variant: "destructive" });
     } else {
       toast({ title: "Success!", description: `Treatment for ${selectedBungalow.name} logged.` });
       setIsDialogOpen(false);
       if (userId) fetchBungalowData(userId);
+    }
+  };
+
+  const handleDailyChange = (poolId: string, field: keyof DailyReadValues, value: string) => {
+    setDailyReads(prev => ({ ...prev, [poolId]: { ...prev[poolId], [field]: value } }));
+  };
+
+  const handleWeeklyChange = (poolId: string, field: keyof WeeklyReadValues, value: string) => {
+    setWeeklyReads(prev => ({ ...prev, [poolId]: { ...prev[poolId], [field]: value } }));
+  };
+
+  const handleSaveDaily = async () => {
+    if (!userId) return;
+    const readsToInsert = Object.entries(dailyReads)
+      .filter(([, values]) => Object.values(values).some(v => v))
+      .map(([poolId, values]) => ({
+        pool_id: poolId,
+        user_id: userId,
+        ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === '' ? null : value]))
+      }));
+    if (readsToInsert.length === 0) {
+      toast({ title: "No data to save", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("daily_reads").insert(readsToInsert);
+    if (error) {
+      toast({ title: "Error saving daily reads", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success!", description: "Daily reads have been saved." });
+      setDailyReads({});
+    }
+  };
+
+  const handleSaveWeekly = async () => {
+    if (!userId) return;
+    const readsToInsert = Object.entries(weeklyReads)
+      .filter(([, values]) => Object.values(values).some(v => v))
+      .map(([poolId, values]) => ({
+        pool_id: poolId,
+        user_id: userId,
+        ...Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value === '' ? null : value]))
+      }));
+    if (readsToInsert.length === 0) {
+      toast({ title: "No data to save", variant: "destructive" });
+      return;
+    }
+    const { error } = await supabase.from("weekly_reads").insert(readsToInsert);
+    if (error) {
+      toast({ title: "Error saving weekly reads", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success!", description: "Weekly reads have been saved." });
+      setWeeklyReads({});
     }
   };
 
@@ -211,10 +264,56 @@ const BungalowReads = () => {
           
           <Tabs defaultValue="water-balanced" className="w-full">
             <TabsList className="grid w-full grid-cols-3 max-w-lg mx-auto print:hidden">
-              <TabsTrigger value="daily-reads" disabled>Daily Reads</TabsTrigger>
-              <TabsTrigger value="tds" disabled>TDS (Weekly Reads)</TabsTrigger>
+              <TabsTrigger value="daily-reads">Daily Reads</TabsTrigger>
+              <TabsTrigger value="tds">TDS (Weekly Reads)</TabsTrigger>
               <TabsTrigger value="water-balanced">Water Balanced</TabsTrigger>
             </TabsList>
+
+            <TabsContent value="daily-reads" className="space-y-6 mt-6">
+              <div className="text-right print:hidden">
+                <Button onClick={handleSaveDaily}>Save All Daily Reads</Button>
+              </div>
+              {displayBungalows.map(bungalow => {
+                const values = dailyReads[bungalow.poolId] || {};
+                return (
+                  <Card key={bungalow.poolId}>
+                    <CardHeader><CardTitle>{bungalow.name}</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-6 gap-4">
+                        <div className="space-y-1"><Label>Chlorine</Label><Input type="number" step="0.1" value={values.chlorine || ""} onChange={e => handleDailyChange(bungalow.poolId, 'chlorine', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>pH</Label><Input type="number" step="0.1" value={values.ph || ""} onChange={e => handleDailyChange(bungalow.poolId, 'ph', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Temperature</Label><Input type="number" step="0.1" value={values.temperature || ""} onChange={e => handleDailyChange(bungalow.poolId, 'temperature', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Flow</Label><Input type="number" step="0.1" value={values.flow || ""} onChange={e => handleDailyChange(bungalow.poolId, 'flow', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Influent</Label><Input type="number" step="0.1" value={values.influent || ""} onChange={e => handleDailyChange(bungalow.poolId, 'influent', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Effluent</Label><Input type="number" step="0.1" value={values.effluent || ""} onChange={e => handleDailyChange(bungalow.poolId, 'effluent', e.target.value)} /></div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </TabsContent>
+
+            <TabsContent value="tds" className="space-y-6 mt-6">
+              <div className="text-right print:hidden">
+                <Button onClick={handleSaveWeekly}>Save All Weekly Reads</Button>
+              </div>
+              {displayBungalows.map(bungalow => {
+                const values = weeklyReads[bungalow.poolId] || {};
+                return (
+                  <Card key={bungalow.poolId}>
+                    <CardHeader><CardTitle>{bungalow.name}</CardTitle></CardHeader>
+                    <CardContent>
+                      <div className="grid md:grid-cols-4 gap-4">
+                        <div className="space-y-1"><Label>TDS</Label><Input type="number" step="0.1" value={values.tds || ""} onChange={e => handleWeeklyChange(bungalow.poolId, 'tds', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Alkalinity</Label><Input type="number" step="0.1" value={values.alkalinity || ""} onChange={e => handleWeeklyChange(bungalow.poolId, 'alkalinity', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Calcium Hardness</Label><Input type="number" step="0.1" value={values.calcium_hardness || ""} onChange={e => handleWeeklyChange(bungalow.poolId, 'calcium_hardness', e.target.value)} /></div>
+                        <div className="space-y-1"><Label>Saturation Index</Label><Input type="number" step="0.1" value={values.saturation_index || ""} onChange={e => handleWeeklyChange(bungalow.poolId, 'saturation_index', e.target.value)} /></div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </TabsContent>
 
             <TabsContent value="water-balanced" className="mt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
