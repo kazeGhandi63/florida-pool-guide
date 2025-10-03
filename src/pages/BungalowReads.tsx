@@ -262,7 +262,7 @@ const BungalowReads = () => {
     }
 
     const treatmentData: any = {
-      pool_id: poolId,
+      bungalow_id: poolId,
       user_id: userId,
       alkalinity_reading: latestRead?.alkalinity,
       calcium_reading: latestRead?.calcium_hardness,
